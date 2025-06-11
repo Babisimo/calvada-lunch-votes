@@ -7,15 +7,6 @@ import {
 } from 'firebase/auth';
 import {
   getFirestore,
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  doc,
-  setDoc,
-  onSnapshot
 } from 'firebase/firestore';
 
 const firebaseConfig = {
