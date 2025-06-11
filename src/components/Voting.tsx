@@ -29,8 +29,8 @@ export default function Voting({ user }: { user: any }) {
   const [loadingOptions, setLoadingOptions] = useState(true);
 
   const weekKey = getWeekKey();
-  // const canVote = [3, 4, 5].includes(new Date().getDay()); // Wed–Fri
-  const canVote = true; // Wed–Fri
+  const canVote = [3, 4, 5].includes(new Date().getDay()); // Wed–Fri
+  
 
   // 👀 Watch weekly options for updates
   useEffect(() => {
