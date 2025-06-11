@@ -6,9 +6,7 @@ import {
   deleteDoc,
   doc,
   setDoc,
-  onSnapshot,
-  query,
-  where
+  onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
@@ -24,9 +22,9 @@ const getWeekKey = () => {
 
 export default function MenuAdmin() {
   const [menuItems, setMenuItems] = useState<{ id: string; name: string }[]>([]);
+  const [weeklyOptions, setWeeklyOptions] = useState<string[]>([]);
   const [newItem, setNewItem] = useState('');
   const [loading, setLoading] = useState(true);
-  const [hasVotes, setHasVotes] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
 
@@ -34,79 +32,77 @@ export default function MenuAdmin() {
   const weekKey = getWeekKey();
 
   useEffect(() => {
-    const unsub = onSnapshot(menuRef, (snapshot) => {
+    const unsubMenu = onSnapshot(menuRef, (snapshot) => {
       const items = snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().name }));
       setMenuItems(items);
       setLoading(false);
     });
-    return unsub;
-  }, []);
 
-  useEffect(() => {
-    const votesQuery = query(collection(db, 'votes'), where('week', '==', weekKey));
-    const unsubVotes = onSnapshot(votesQuery, snap => {
-      setHasVotes(snap.size > 0);
+    const unsubWeekly = onSnapshot(doc(db, 'weeklyOptions', weekKey), (docSnap) => {
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setWeeklyOptions(data.choices || []);
+      } else {
+        setWeeklyOptions([]);
+      }
     });
-    return () => unsubVotes();
+
+    return () => {
+      unsubMenu();
+      unsubWeekly();
+    };
   }, [weekKey]);
 
-  async function handleAdd() {
+  const handleAdd = async () => {
     if (!newItem.trim()) return;
     try {
       const docRef = await addDoc(menuRef, { name: newItem.trim() });
-      setMenuItems(prev => [...prev, { id: docRef.id, name: newItem.trim() }]);
       toast.success('Item added!');
       setNewItem('');
     } catch (err) {
       toast.error('Failed to add item');
       console.error(err);
     }
-  }
+  };
 
-  async function handleDelete(id: string) {
+  const handleDelete = async (id: string, name: string) => {
+    const confirmDelete = confirm(`Are you sure you want to delete "${name}" from the menu?`);
+    if (!confirmDelete) return;
+
     try {
       await deleteDoc(doc(db, 'menu', id));
-      setMenuItems(prev => prev.filter((item) => item.id !== id));
       toast.success('Item deleted!');
     } catch (err) {
-      toast.error('Failed to delete');
+      toast.error('Failed to delete item');
       console.error(err);
     }
-  }
+  };
 
-  async function regenerateWeeklyOptions() {
-    try {
-      const snapshot = await getDocs(menuRef);
-      const allOptions = snapshot.docs.map((doc) => doc.data().name);
-      if (allOptions.length < 4) {
-        toast.error('Need at least 4 menu items to regenerate weekly options.');
-        return;
-      }
 
-      const shuffled = [...allOptions].sort(() => 0.5 - Math.random()).slice(0, 4);
-
-      await setDoc(doc(db, 'weeklyOptions', weekKey), {
-        choices: shuffled,
-        week: weekKey,
-      });
-
-      toast.success('✅ New weekly options generated!');
-    } catch (err) {
-      toast.error('Failed to regenerate');
-      console.error(err);
-    }
-  }
-
-  async function handleEditSave(id: string) {
+  const handleEditSave = async (id: string) => {
     try {
       await setDoc(doc(db, 'menu', id), { name: editText.trim() });
       toast.success('Item updated!');
       setEditingId(null);
     } catch (err) {
-      toast.error('Failed to update');
+      toast.error('Failed to update item');
       console.error(err);
     }
-  }
+  };
+
+  const handleAddToWeekly = async (name: string) => {
+    if (weeklyOptions.includes(name)) {
+      toast('Already in weekly options!');
+      return;
+    }
+
+    const updated = [...weeklyOptions, name];
+    await setDoc(doc(db, 'weeklyOptions', weekKey), {
+      week: weekKey,
+      choices: updated
+    });
+    toast.success(`✅ "${name}" added to weekly options`);
+  };
 
   return (
     <div className="mt-12 p-6 bg-white rounded-xl shadow-md border border-gray-200 text-center max-w-2xl mx-auto">
@@ -133,74 +129,70 @@ export default function MenuAdmin() {
         <p className="text-gray-400">Loading menu...</p>
       ) : (
         <ul className="space-y-3 max-w-md mx-auto text-left">
-          {menuItems.map((item) => (
-            <li
-              key={item.id}
-              className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-md shadow-sm"
-            >
-              {editingId === item.id ? (
-                <>
-                  <input
-                    type="text"
-                    value={editText}
-                    onChange={(e) => setEditText(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleEditSave(item.id);
-                    }}
-                    className="flex-1 mr-2 px-2 py-1 rounded border border-gray-300 bg-white text-gray-900"
-                  />
-                  <button
-                    onClick={() => handleEditSave(item.id)}
-                    className="text-green-600 hover:text-green-700 text-sm font-medium"
-                  >
-                    ✅ Save
-                  </button>
-                </>
-              ) : (
-                <>
-                  <span className="text-base text-gray-800">{item.name}</span>
-                  <div className="flex items-center gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingId(item.id);
-                        setEditText(item.name);
+          {menuItems.map((item) => {
+            const isSelected = weeklyOptions.includes(item.name);
+            return (
+              <li
+                key={item.id}
+                className={`flex justify-between items-center px-4 py-2 rounded-md shadow-sm border ${isSelected ? 'border-green-500 bg-green-50' : 'bg-gray-50'
+                  }`}
+              >
+                {editingId === item.id ? (
+                  <>
+                    <input
+                      type="text"
+                      value={editText}
+                      onChange={(e) => setEditText(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleEditSave(item.id);
                       }}
-                      className="text-yellow-500 hover:underline text-sm"
-                    >
-                      ✏️ Edit
-                    </button>
+                      className="flex-1 mr-2 px-2 py-1 rounded border border-gray-300 bg-white text-gray-900"
+                    />
                     <button
-                      onClick={() => handleDelete(item.id)}
-                      className="text-red-500 hover:underline text-sm"
+                      onClick={() => handleEditSave(item.id)}
+                      className="text-green-600 hover:text-green-700 text-sm font-medium"
                     >
-                      ❌ Delete
+                      ✅ Save
                     </button>
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
+                  </>
+                ) : (
+                  <>
+                    <span className="text-base text-gray-800">
+                      {item.name}
+                      {isSelected && <span className="ml-1 text-green-600">✔️</span>}
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {!isSelected && (
+                        <button
+                          onClick={() => handleAddToWeekly(item.name)}
+                          className="text-blue-600 hover:underline text-sm"
+                        >
+                          ➕ Add
+                        </button>
+                      )}
+                      <button
+                        onClick={() => {
+                          setEditingId(item.id);
+                          setEditText(item.name);
+                        }}
+                        className="text-yellow-500 hover:underline text-sm"
+                      >
+                        ✏️ Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id, item.name)}
+                        className="text-red-500 hover:underline text-sm"
+                      >
+                        ❌ Delete
+                      </button>
+                    </div>
+                  </>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
-
-      <div className="mt-8">
-        <button
-          onClick={regenerateWeeklyOptions}
-          disabled={hasVotes}
-          className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${
-            hasVotes
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-md'
-          }`}
-        >
-          🔄 Regenerate This Week's Options
-        </button>
-        {hasVotes && (
-          <p className="text-sm text-red-500 mt-2">
-            Cannot regenerate after voting has started.
-          </p>
-        )}
-      </div>
     </div>
   );
 }

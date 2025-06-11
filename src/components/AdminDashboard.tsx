@@ -118,11 +118,25 @@ export default function AdminDashboard() {
     }
   };
 
+  const handleRemoveWeeklyOption = async (choice: string) => {
+    if (!confirm(`Remove "${choice}" from this week's options?`)) return;
+    try {
+      const updated = weeklyChoices.filter(item => item !== choice);
+      await setDoc(doc(db, 'weeklyOptions', weekKey), {
+        choices: updated,
+        week: weekKey,
+      });
+      toast.success('Option removed!');
+    } catch (err) {
+      toast.error('Failed to remove option');
+      console.error(err);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800">
       <Toaster position="top-center" />
 
-      {/* Header */}
       <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">🛠️ Admin Dashboard</h1>
         <div className="space-x-4">
@@ -142,7 +156,6 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-12">
-        {/* Weekly Options Section */}
         <section className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-center">📊 This Week's Options</h3>
 
@@ -151,9 +164,15 @@ export default function AdminDashboard() {
               {weeklyChoices.map((choice, index) => (
                 <li
                   key={index}
-                  className="px-4 py-2 bg-gray-50 rounded text-gray-900"
+                  className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded text-gray-900"
                 >
-                  {index + 1}. {choice}
+                  <span>{index + 1}. {choice}</span>
+                  <button
+                    onClick={() => handleRemoveWeeklyOption(choice)}
+                    className="text-red-500 text-sm hover:underline"
+                  >
+                    ❌ Remove
+                  </button>
                 </li>
               ))}
             </ul>
@@ -180,7 +199,6 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        {/* Toggle Menu Editor */}
         <div className="text-center">
           <button
             onClick={() => setShowMenuEditor(!showMenuEditor)}
@@ -190,10 +208,8 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* Menu Admin */}
         {showMenuEditor && <MenuAdmin />}
 
-        {/* Admin Management */}
         <section className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h2 className="text-xl font-semibold mb-4 text-center">👤 Manage Admins</h2>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mb-6">
@@ -233,7 +249,6 @@ export default function AdminDashboard() {
           )}
         </section>
 
-        {/* Reset Votes */}
         <div className="text-center">
           <button
             onClick={handleResetVotes}
