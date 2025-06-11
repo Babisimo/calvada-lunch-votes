@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
   collection,
-  getDocs,
   addDoc,
   deleteDoc,
   doc,
@@ -56,7 +55,7 @@ export default function MenuAdmin() {
   const handleAdd = async () => {
     if (!newItem.trim()) return;
     try {
-      const docRef = await addDoc(menuRef, { name: newItem.trim() });
+      await addDoc(menuRef, { name: newItem.trim() });
       toast.success('Item added!');
       setNewItem('');
     } catch (err) {
