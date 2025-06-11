@@ -30,25 +30,18 @@ export default function Voting({ user }: { user: any }) {
 
   const weekKey = getWeekKey();
   const canVote = [3, 4, 5].includes(new Date().getDay()); // Wed–Fri
-  
 
-  // 👀 Watch weekly options for updates
   useEffect(() => {
     const q = query(collection(db, 'weeklyOptions'), where('week', '==', weekKey));
     const unsub = onSnapshot(q, (snap) => {
       const match = snap.docs.find((doc) => doc.id === weekKey);
-      if (match) {
-        setChoices(match.data().choices || []);
-      } else {
-        setChoices([]);
-      }
+      setChoices(match?.data().choices || []);
       setLoadingOptions(false);
     });
 
     return unsub;
   }, [weekKey]);
 
-  // ✅ Check if user has voted
   useEffect(() => {
     async function checkVote() {
       const q = query(
@@ -63,7 +56,6 @@ export default function Voting({ user }: { user: any }) {
     if (user && canVote) checkVote();
   }, [user, canVote, weekKey]);
 
-  // 🎯 Submit vote
   async function castVote() {
     if (!selected || isSubmitting) return;
     if (!auth.currentUser) {
@@ -71,7 +63,6 @@ export default function Voting({ user }: { user: any }) {
       return;
     }
 
-    // ✋ Restrict to @calvada.com
     if (!user.email.endsWith('@calvada.com')) {
       toast.error('Only @calvada.com emails can vote');
       return;
@@ -100,10 +91,9 @@ export default function Voting({ user }: { user: any }) {
     }
   }
 
-  // 🧠 UI States
   if (!canVote) {
     return (
-      <p className="text-center text-gray-500 dark:text-gray-400">
+      <p className="text-center text-gray-500">
         Voting opens on <b>Wednesday</b> and closes <b>Friday</b>.
       </p>
     );
@@ -115,7 +105,7 @@ export default function Voting({ user }: { user: any }) {
 
   if (!choices.length) {
     return (
-      <p className="text-center text-gray-500 dark:text-gray-400">
+      <p className="text-center text-gray-500">
         No options configured for this week. Admins need to regenerate the menu!
       </p>
     );
@@ -123,7 +113,7 @@ export default function Voting({ user }: { user: any }) {
 
   if (hasVoted) {
     return (
-      <p className="text-center text-green-600 dark:text-green-400">
+      <p className="text-center text-green-600">
         ✅ You’ve already voted this week.
       </p>
     );
@@ -157,8 +147,8 @@ export default function Voting({ user }: { user: any }) {
         disabled={!selected || isSubmitting}
         className={`w-full py-3 text-white rounded-md transition-all text-center text-lg font-semibold 
           ${isSubmitting || !selected
-            ? 'bg-blue-300 dark:bg-blue-700 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 dark:bg-blue-500 dark:hover:bg-blue-600 shadow-md'}
+            ? 'bg-blue-300 cursor-not-allowed'
+            : 'bg-blue-600 hover:bg-blue-700 shadow-md'}
         `}
       >
         {isSubmitting ? 'Submitting...' : '✅ Submit Vote'}

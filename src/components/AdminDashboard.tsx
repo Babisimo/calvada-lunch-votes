@@ -119,29 +119,31 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
+    <div className="min-h-screen bg-gray-50 text-gray-800">
       <Toaster position="top-center" />
 
-      {/* Sticky Header */}
-      <header className="sticky top-0 z-10 bg-white dark:bg-gray-900 border-b border-gray-200 dark:border-gray-700 px-6 py-4 shadow-sm flex justify-between items-center">
+      {/* Header */}
+      <header className="sticky top-0 z-10 bg-white border-b border-gray-200 px-6 py-4 shadow-sm flex justify-between items-center">
         <h1 className="text-2xl font-bold tracking-tight">🛠️ Admin Dashboard</h1>
-        <button
-          onClick={() => navigate('/votes')}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition"
-        >
-          Votes
-        </button>
-        <button
-          onClick={() => navigate('/')}
-          className="text-sm text-blue-600 dark:text-blue-400 hover:underline transition"
-        >
-          ⬅ Back to Leaderboard
-        </button>
+        <div className="space-x-4">
+          <button
+            onClick={() => navigate('/votes')}
+            className="text-sm text-blue-600 hover:underline transition"
+          >
+            Votes
+          </button>
+          <button
+            onClick={() => navigate('/')}
+            className="text-sm text-blue-600 hover:underline transition"
+          >
+            ⬅ Back to Leaderboard
+          </button>
+        </div>
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-10 space-y-12">
         {/* Weekly Options Section */}
-        <section className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow border border-gray-200 dark:border-gray-700">
+        <section className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h3 className="text-lg font-semibold mb-4 text-center">📊 This Week's Options</h3>
 
           {weeklyChoices.length > 0 ? (
@@ -149,7 +151,7 @@ export default function AdminDashboard() {
               {weeklyChoices.map((choice, index) => (
                 <li
                   key={index}
-                  className="px-4 py-2 bg-gray-50 dark:bg-gray-700 rounded text-gray-900 dark:text-gray-100"
+                  className="px-4 py-2 bg-gray-50 rounded text-gray-900"
                 >
                   {index + 1}. {choice}
                 </li>
@@ -192,7 +194,7 @@ export default function AdminDashboard() {
         {showMenuEditor && <MenuAdmin />}
 
         {/* Admin Management */}
-        <section className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow border border-gray-200 dark:border-gray-700">
+        <section className="bg-white p-6 rounded-xl shadow border border-gray-200">
           <h2 className="text-xl font-semibold mb-4 text-center">👤 Manage Admins</h2>
           <div className="flex flex-col sm:flex-row gap-3 justify-center items-center mb-6">
             <input
@@ -200,7 +202,7 @@ export default function AdminDashboard() {
               value={newAdmin}
               onChange={(e) => setNewAdmin(e.target.value)}
               placeholder="Enter admin email"
-              className="px-4 py-2 w-full sm:w-auto border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded"
+              className="px-4 py-2 w-full sm:w-auto border border-gray-300 bg-white text-gray-900 rounded"
             />
             <button
               onClick={addAdmin}
@@ -216,7 +218,7 @@ export default function AdminDashboard() {
               {admins.map(({ email }) => (
                 <li
                   key={email}
-                  className="flex justify-between items-center px-4 py-2 bg-gray-100 dark:bg-gray-700 rounded"
+                  className="flex justify-between items-center px-4 py-2 bg-gray-100 rounded"
                 >
                   <span>{email}</span>
                   <button

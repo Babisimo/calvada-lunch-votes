@@ -33,7 +33,6 @@ export default function MenuAdmin() {
   const menuRef = collection(db, 'menu');
   const weekKey = getWeekKey();
 
-  // Load menu items
   useEffect(() => {
     const unsub = onSnapshot(menuRef, (snapshot) => {
       const items = snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().name }));
@@ -43,7 +42,6 @@ export default function MenuAdmin() {
     return unsub;
   }, []);
 
-  // Check if votes exist for current week
   useEffect(() => {
     const votesQuery = query(collection(db, 'votes'), where('week', '==', weekKey));
     const unsubVotes = onSnapshot(votesQuery, snap => {
@@ -111,7 +109,7 @@ export default function MenuAdmin() {
   }
 
   return (
-    <div className="mt-12 p-6 bg-white dark:bg-gray-800 rounded-xl shadow-md border border-gray-200 dark:border-gray-700 text-center max-w-2xl mx-auto">
+    <div className="mt-12 p-6 bg-white rounded-xl shadow-md border border-gray-200 text-center max-w-2xl mx-auto">
       <Toaster position="top-center" />
       <h2 className="text-2xl font-semibold mb-6">🛠️ Edit Menu Options</h2>
 
@@ -121,7 +119,7 @@ export default function MenuAdmin() {
           value={newItem}
           onChange={(e) => setNewItem(e.target.value)}
           placeholder="e.g. 🍔 Burgers"
-          className="flex-1 px-4 py-2 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+          className="flex-1 px-4 py-2 rounded-md border border-gray-300 bg-white text-gray-900"
         />
         <button
           onClick={handleAdd}
@@ -138,7 +136,7 @@ export default function MenuAdmin() {
           {menuItems.map((item) => (
             <li
               key={item.id}
-              className="flex justify-between items-center px-4 py-2 bg-gray-50 dark:bg-gray-700 rounded-md shadow-sm"
+              className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded-md shadow-sm"
             >
               {editingId === item.id ? (
                 <>
@@ -149,7 +147,7 @@ export default function MenuAdmin() {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleEditSave(item.id);
                     }}
-                    className="flex-1 mr-2 px-2 py-1 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                    className="flex-1 mr-2 px-2 py-1 rounded border border-gray-300 bg-white text-gray-900"
                   />
                   <button
                     onClick={() => handleEditSave(item.id)}
@@ -160,7 +158,7 @@ export default function MenuAdmin() {
                 </>
               ) : (
                 <>
-                  <span className="text-base text-gray-800 dark:text-gray-100">{item.name}</span>
+                  <span className="text-base text-gray-800">{item.name}</span>
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => {

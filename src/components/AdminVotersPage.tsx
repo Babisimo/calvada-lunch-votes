@@ -1,4 +1,3 @@
-// src/components/AdminVotersPage.tsx
 import { useEffect, useState } from 'react';
 import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -47,13 +46,13 @@ export default function AdminVotersPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 p-8">
+    <div className="min-h-screen bg-gray-50 text-gray-800 p-8">
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-6">
           <h1 className="text-3xl font-bold">🧑‍💻 Who Voted This Week</h1>
           <a
             href="/admin"
-            className="text-blue-600 dark:text-blue-400 hover:underline text-sm"
+            className="text-blue-600 hover:underline text-sm"
           >
             ← Back to Admin Dashboard
           </a>
@@ -65,17 +64,17 @@ export default function AdminVotersPage() {
           <p className="text-center text-gray-500">No votes submitted yet.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="min-w-full bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden">
-              <thead className="bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-sm uppercase">
+            <table className="min-w-full bg-white rounded-lg shadow-md overflow-hidden">
+              <thead className="bg-gray-100 text-gray-700 text-sm uppercase">
                 <tr>
                   <th className="text-left px-6 py-3">Choice</th>
                   <th className="text-left px-6 py-3">Email</th>
                   <th className="text-left px-6 py-3">Voted At</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 dark:divide-gray-600 text-sm">
+              <tbody className="divide-y divide-gray-200 text-sm">
                 {voters.map((vote, index) => (
-                  <tr key={index} className="hover:bg-gray-50 dark:hover:bg-gray-700 transition">
+                  <tr key={index} className="hover:bg-gray-50 transition">
                     <td className="px-6 py-4">{vote.choice}</td>
                     <td className="px-6 py-4">{vote.email}</td>
                     <td className="px-6 py-4">{vote.timestamp}</td>

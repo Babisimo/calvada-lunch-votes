@@ -12,7 +12,6 @@ function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminChecked, setAdminChecked] = useState(false);
 
-  // Check if the user is in the "admins" Firestore collection
   useEffect(() => {
     async function checkAdmin() {
       if (!user) {
@@ -38,21 +37,21 @@ function App() {
 
   if (loading || !adminChecked) {
     return (
-      <div className="min-h-screen grid place-items-center text-gray-400 dark:text-gray-500">
+      <div className="min-h-screen grid place-items-center text-gray-400">
         Loading...
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100 transition-colors">
+    <div className="min-h-screen bg-gray-50 text-gray-800">
       <div className="max-w-2xl mx-auto px-6 py-10">
         <header className="flex items-center justify-between mb-10">
           <h1 className="text-3xl font-bold tracking-tight">🍽️ Weekly Lunch Vote</h1>
           {isAdmin && (
             <a
               href="/admin"
-              className="text-sm font-medium text-purple-600 dark:text-purple-400 hover:underline transition ml-4"
+              className="text-sm font-medium text-purple-600 hover:underline transition ml-4"
             >
               Admin
             </a>
@@ -60,7 +59,7 @@ function App() {
           {user && (
             <button
               onClick={logout}
-              className="text-sm font-medium text-blue-600 dark:text-blue-400 hover:underline transition"
+              className="text-sm font-medium text-blue-600 hover:underline transition"
             >
               Logout
             </button>
@@ -71,8 +70,6 @@ function App() {
         {user && <Voting user={user} />}
 
         <Leaderboard />
-
-        {/* {user && isAdmin && <AdminDashboard />} */}
       </div>
     </div>
   );

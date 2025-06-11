@@ -73,7 +73,7 @@ export default function Leaderboard() {
                   <span className="font-medium">{r.choice}</span>
                   <span className="text-sm text-gray-500">{Math.round(percentage)}%</span>
                 </div>
-                <div className="w-full bg-gray-200 rounded-full h-4 dark:bg-gray-700 overflow-hidden">
+                <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
                   <div
                     className={`h-full ${colors[idx % colors.length]} transition-all duration-700`}
                     style={{ width: `${percentage}%` }}
