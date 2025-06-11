@@ -1,4 +1,3 @@
-import React from 'react';
 import { loginWithGoogle } from '../../firebaseConfig';
 
 export default function Login({ onLogin = loginWithGoogle }: { onLogin?: () => void }) {
