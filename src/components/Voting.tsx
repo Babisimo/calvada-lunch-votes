@@ -145,7 +145,7 @@ export default function Voting({ user }: { user: any }) {
       <button
         onClick={castVote}
         disabled={!selected || isSubmitting}
-        className={`w-full py-3 text-white rounded-md transition-all text-center text-lg font-semibold 
+        className={`w-full py-3 text-black rounded-md transition-all text-center text-lg font-semibold 
           ${isSubmitting || !selected
             ? 'bg-blue-300 cursor-not-allowed'
             : 'bg-blue-600 hover:bg-blue-700 shadow-md'}
