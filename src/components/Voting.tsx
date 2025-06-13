@@ -7,6 +7,7 @@ import {
   where,
   serverTimestamp,
   onSnapshot,
+  doc
 } from 'firebase/firestore';
 import { db, auth, loginWithGoogle } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
@@ -21,26 +22,60 @@ const getWeekKey = () => {
   return `${year}-W${week}`;
 };
 
+function formatCountdown(ms: number) {
+  if (ms <= 0) return 'Voting closed';
+
+  const totalSeconds = Math.floor(ms / 1000);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+
+  return `${d}d ${h}h ${m}m ${s}s`;
+}
+
 export default function Voting({ user }: { user: any }) {
   const [selected, setSelected] = useState('');
   const [hasVoted, setHasVoted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [choices, setChoices] = useState<string[]>([]);
   const [loadingOptions, setLoadingOptions] = useState(true);
+  const [voteStart, setVoteStart] = useState(0);
+  const [voteEnd, setVoteEnd] = useState(0);
+  const [now, setNow] = useState(Date.now());
 
   const weekKey = getWeekKey();
-  const canVote = [3, 4, 5].includes(new Date().getDay()); // Wed–Fri
+  const canVote = now >= voteStart && now <= voteEnd;
 
   useEffect(() => {
-    const q = query(collection(db, 'weeklyOptions'), where('week', '==', weekKey));
-    const unsub = onSnapshot(q, (snap) => {
+    const unsubOptions = onSnapshot(query(collection(db, 'weeklyOptions'), where('week', '==', weekKey)), (snap) => {
       const match = snap.docs.find((doc) => doc.id === weekKey);
       setChoices(match?.data().choices || []);
       setLoadingOptions(false);
     });
 
-    return unsub;
+    const unsubConfig = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
+      if (snap.exists()) {
+        const data = snap.data();
+        const start = data.start ? new Date(data.start).getTime() : 0;
+        const end = data.end ? new Date(data.end).getTime() : 0;
+        setVoteStart(start);
+        setVoteEnd(end);
+      }
+    });
+
+    return () => {
+      unsubOptions();
+      unsubConfig();
+    };
   }, [weekKey]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setNow(Date.now());
+    }, 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     async function checkVote() {
@@ -93,9 +128,14 @@ export default function Voting({ user }: { user: any }) {
 
   if (!canVote) {
     return (
-      <p className="text-center text-gray-500">
-        Voting opens on <b>Wednesday</b> and closes <b>Friday</b>.
-      </p>
+      <div className="text-center text-gray-500">
+        <p>🕒 Voting is currently closed.</p>
+        {voteStart > now && (
+          <p>
+            Opens in: <b>{formatCountdown(voteStart - now)}</b>
+          </p>
+        )}
+      </div>
     );
   }
 
@@ -124,6 +164,10 @@ export default function Voting({ user }: { user: any }) {
       <Toaster position="top-center" />
       <h2 className="text-2xl font-semibold mb-4 text-center">Choose this week's lunch</h2>
 
+      <div className="text-center mb-4 text-sm text-gray-600">
+        ⏳ Time left to vote: <b>{formatCountdown(voteEnd - now)}</b>
+      </div>
+
       <ul className="space-y-3 mb-6">
         {choices.map((opt) => (
           <li key={opt}>
@@ -148,8 +192,7 @@ export default function Voting({ user }: { user: any }) {
         className={`w-full py-3 text-black rounded-md transition-all text-center text-lg font-semibold 
           ${isSubmitting || !selected
             ? 'bg-blue-300 cursor-not-allowed'
-            : 'bg-blue-600 hover:bg-blue-700 shadow-md'}
-        `}
+            : 'bg-blue-600 hover:bg-blue-700 shadow-md'}`}
       >
         {isSubmitting ? 'Submitting...' : '✅ Submit Vote'}
       </button>

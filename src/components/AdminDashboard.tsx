@@ -1,3 +1,4 @@
+import VotingTimerAdmin from './VotingTimerAdmin';
 import { useEffect, useState } from 'react';
 import {
   collection,
@@ -5,12 +6,14 @@ import {
   deleteDoc,
   doc,
   setDoc,
-  onSnapshot
+  onSnapshot,
+  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
 import MenuAdmin from './MenuAdmin';
 import { useNavigate } from 'react-router-dom';
+
 
 const getWeekKey = () => {
   const now = new Date();
@@ -183,11 +186,10 @@ export default function AdminDashboard() {
           <button
             onClick={regenerateWeeklyOptions}
             disabled={hasVotes}
-            className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${
-              hasVotes
-                ? 'bg-gray-400 cursor-not-allowed'
-                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-md'
-            }`}
+            className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${hasVotes
+              ? 'bg-gray-400 cursor-not-allowed'
+              : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-md'
+              }`}
           >
             🔄 Regenerate This Week’s Options
           </button>
@@ -198,6 +200,10 @@ export default function AdminDashboard() {
             </p>
           )}
         </section>
+        
+        <div>
+          <VotingTimerAdmin />
+        </div>
 
         <div className="text-center">
           <button
