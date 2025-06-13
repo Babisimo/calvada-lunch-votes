@@ -7,7 +7,6 @@ import {
   doc,
   setDoc,
   onSnapshot,
-  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
@@ -200,7 +199,7 @@ export default function AdminDashboard() {
             </p>
           )}
         </section>
-        
+
         <div>
           <VotingTimerAdmin />
         </div>

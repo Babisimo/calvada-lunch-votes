@@ -5,7 +5,6 @@ import {
   deleteDoc,
   doc,
   setDoc,
-  getDoc,
   onSnapshot
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
@@ -20,14 +19,6 @@ const getWeekKey = () => {
   return `${year}-W${week}`;
 };
 
-function formatCountdown(ms: number) {
-  const totalSeconds = Math.floor(ms / 1000);
-  const hours = Math.floor(totalSeconds / 3600);
-  const minutes = Math.floor((totalSeconds % 3600) / 60);
-  const seconds = totalSeconds % 60;
-  return `${hours}h ${minutes}m ${seconds}s`;
-}
-
 export default function MenuAdmin() {
   const [menuItems, setMenuItems] = useState<{ id: string; name: string }[]>([]);
   const [weeklyOptions, setWeeklyOptions] = useState<string[]>([]);
@@ -35,10 +26,6 @@ export default function MenuAdmin() {
   const [loading, setLoading] = useState(true);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState('');
-  const [startTime, setStartTime] = useState('');
-  const [endTime, setEndTime] = useState('');
-  const [countdown, setCountdown] = useState('');
-  const [status, setStatus] = useState<'before' | 'during' | 'after'>('before');
 
   const menuRef = collection(db, 'menu');
   const weekKey = getWeekKey();
@@ -64,62 +51,6 @@ export default function MenuAdmin() {
       unsubWeekly();
     };
   }, [weekKey]);
-
-  useEffect(() => {
-    const fetchVotingConfig = async () => {
-      const configSnap = await getDoc(doc(db, 'settings', 'votingConfig'));
-      if (configSnap.exists()) {
-        const data = configSnap.data();
-        if (data.startTime?.seconds) setStartTime(new Date(data.startTime.seconds * 1000).toISOString().slice(0, 16));
-        if (data.endTime?.seconds) setEndTime(new Date(data.endTime.seconds * 1000).toISOString().slice(0, 16));
-      }
-    };
-    fetchVotingConfig();
-  }, []);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      if (!startTime || !endTime) return;
-
-      const now = new Date().getTime();
-      const start = new Date(startTime).getTime();
-      const end = new Date(endTime).getTime();
-
-      if (now < start) {
-        setStatus('before');
-        setCountdown(formatCountdown(start - now));
-      } else if (now < end) {
-        setStatus('during');
-        setCountdown(formatCountdown(end - now));
-      } else {
-        setStatus('after');
-        setCountdown('Voting period has ended');
-      }
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [startTime, endTime]);
-
-  const saveVotingTimes = async () => {
-    if (!startTime || !endTime) {
-      toast.error('Please select both start and end times!');
-      return;
-    }
-
-    const start = new Date(startTime);
-    const end = new Date(endTime);
-
-    if (end <= start) {
-      toast.error('End time must be after start time');
-      return;
-    }
-
-    await setDoc(doc(db, 'settings', 'votingConfig'), {
-      startTime: start,
-      endTime: end
-    });
-
-    toast.success('🕒 Voting timer saved!');
-  };
 
   const handleAdd = async () => {
     if (!newItem.trim()) return;
