@@ -13,13 +13,21 @@ import toast, { Toaster } from 'react-hot-toast';
 import MenuAdmin from './MenuAdmin';
 import { useNavigate } from 'react-router-dom';
 
-
 const getWeekKey = () => {
   const now = new Date();
-  const year = now.getFullYear();
-  const week = Math.ceil(
-    ((+now - new Date(year, 0, 1).getTime()) / 86400000 + new Date(year, 0, 1).getDay() + 1) / 7
-  );
+
+  // Shift date back if before Wednesday
+  const day = now.getDay(); // 0 (Sun) to 6 (Sat)
+  const daysSinceWednesday = (day + 4) % 7; // Wed = 3, so (day - 3 + 7) % 7
+  const wednesdayStart = new Date(now);
+  wednesdayStart.setDate(now.getDate() - daysSinceWednesday);
+  wednesdayStart.setHours(0, 0, 0, 0);
+
+  const year = wednesdayStart.getFullYear();
+  const startOfYear = new Date(year, 0, 1);
+  const diff = wednesdayStart.getTime() - startOfYear.getTime();
+  const week = Math.ceil(diff / (7 * 24 * 60 * 60 * 1000));
+
   return `${year}-W${week}`;
 };
 
