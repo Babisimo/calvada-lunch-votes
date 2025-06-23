@@ -14,22 +14,41 @@ import MenuAdmin from './MenuAdmin';
 import { useNavigate } from 'react-router-dom';
 
 const getWeekKey = () => {
-  const now = new Date();
+  const nowUTC = new Date();
 
-  // Shift date back if before Wednesday
-  const day = now.getDay(); // 0 (Sun) to 6 (Sat)
-  const daysSinceWednesday = (day + 4) % 7; // Wed = 3, so (day - 3 + 7) % 7
-  const wednesdayStart = new Date(now);
-  wednesdayStart.setDate(now.getDate() - daysSinceWednesday);
-  wednesdayStart.setHours(0, 0, 0, 0);
+  // Convert to PST (UTC - 8 or -7 depending on DST)
+  const nowPST = new Date(
+    nowUTC.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
+  );
 
-  const year = wednesdayStart.getFullYear();
-  const startOfYear = new Date(year, 0, 1);
-  const diff = wednesdayStart.getTime() - startOfYear.getTime();
-  const week = Math.ceil(diff / (7 * 24 * 60 * 60 * 1000));
+  // Custom reset point: Wednesday 12:00 PM PST
+  const resetHour = 12;
+  const resetDay = 3; // 0 = Sun, 3 = Wed
+
+  const day = nowPST.getDay();
+  const hour = nowPST.getHours();
+
+  // If it's before Wednesday @ 12pm, use the previous week's Wednesday
+  let wednesday = new Date(nowPST);
+  if (day < resetDay || (day === resetDay && hour < resetHour)) {
+    const diff = (7 + day - resetDay) % 7 || 7;
+    wednesday.setDate(nowPST.getDate() - diff);
+  } else {
+    const diff = (day - resetDay);
+    wednesday.setDate(nowPST.getDate() - diff);
+  }
+
+  // Lock to 12pm PST on that Wednesday
+  wednesday.setHours(resetHour, 0, 0, 0);
+
+  // Generate week key
+  const year = wednesday.getFullYear();
+  const startOfYear = new Date(Date.UTC(year, 0, 1));
+  const week = Math.ceil((wednesday.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000));
 
   return `${year}-W${week}`;
 };
+
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
