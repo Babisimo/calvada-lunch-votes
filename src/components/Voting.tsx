@@ -1,19 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  collection,
-  addDoc,
-  getDocs,
-  query,
-  where,
-  serverTimestamp,
-  onSnapshot,
-  doc
+  collection, addDoc, getDocs, query, where, serverTimestamp, onSnapshot, doc
 } from 'firebase/firestore';
 import { db, auth, loginWithGoogle } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
+import { decideAndPersistWinner, type WinnerRecord } from './services/winner';
 
 function formatCountdown(ms: number) {
   if (ms <= 0) return 'Voting closed';
@@ -24,15 +18,10 @@ function formatCountdown(ms: number) {
   const s = totalSeconds % 60;
   return `${d}d ${h}h ${m}m ${s}s`;
 }
-
 function toMillis(v: any): number {
-  // Accept Firestore Timestamp, ISO string, or number
   if (!v) return 0;
   if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
-  if (typeof v === 'string') {
-    const t = new Date(v).getTime();
-    return Number.isNaN(t) ? 0 : t;
-  }
+  if (typeof v === 'string') { const t = new Date(v).getTime(); return Number.isNaN(t) ? 0 : t; }
   if (typeof v === 'number') return v;
   return 0;
 }
@@ -48,104 +37,95 @@ export default function Voting({ user }: { user: any }) {
   const [voteStart, setVoteStart] = useState(0);
   const [voteEnd, setVoteEnd] = useState(0);
   const [now, setNow] = useState(Date.now());
+  const [winnerDoc, setWinnerDoc] = useState<WinnerRecord | null>(null);
+  const [bannerMsg, setBannerMsg] = useState('');
+  const celebratedRef = useRef(false);
 
   const canVote = useMemo(() => now >= voteStart && now <= voteEnd, [now, voteStart, voteEnd]);
-  const firstLoadRef = useRef(true);
 
-  // Keep a ticking "now"
   useEffect(() => {
-    const interval = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(interval);
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
   }, []);
 
-  // Load weekly options by direct doc read (no query) + normalize
+  // Options
   useEffect(() => {
     if (!weekKey) return;
     setLoadingOptions(true);
-
     const unsub = onSnapshot(doc(db, 'weeklyOptions', weekKey), (snap) => {
-      if (!snap.exists()) {
-        setChoices([]);
-        setLoadingOptions(false);
-        return;
-      }
-      const normalized = normalizeChoices(snap.data()?.choices);
-      setChoices(normalized);
+      setChoices(snap.exists() ? normalizeChoices(snap.data()?.choices) : []);
       setLoadingOptions(false);
-    }, (err) => {
-      console.error('[Voting] weeklyOptions listener error:', err);
-      setChoices([]);
-      setLoadingOptions(false);
-    });
-
+    }, () => setLoadingOptions(false));
     return () => unsub();
   }, [weekKey]);
 
-  // Clear selection if the available choices change and the current selection disappears
+  // Clear selection if choices change
   useEffect(() => {
-    if (!selected) return;
-    if (!choices.includes(selected)) {
-      setSelected('');
-    }
+    if (selected && !choices.includes(selected)) setSelected('');
   }, [choices, selected]);
 
-  // Load voting window config (supports startTime/endTime or start/end)
+  // Window
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
-      if (!snap.exists()) {
-        setVoteStart(0);
-        setVoteEnd(0);
-        return;
-      }
+      if (!snap.exists()) { setVoteStart(0); setVoteEnd(0); return; }
       const data = snap.data();
-      const startMs = toMillis(data?.startTime ?? data?.start);
-      const endMs = toMillis(data?.endTime ?? data?.end);
-      setVoteStart(startMs);
-      setVoteEnd(endMs);
-    }, (err) => {
-      console.error('[Voting] votingConfig listener error:', err);
-      setVoteStart(0);
-      setVoteEnd(0);
+      setVoteStart(toMillis(data?.startTime ?? data?.start));
+      setVoteEnd(toMillis(data?.endTime ?? data?.end));
     });
-
     return () => unsub();
   }, []);
 
-  // Has this user already voted this week?
+  // Already voted?
   useEffect(() => {
     async function checkVote() {
       if (!user?.uid || !weekKey) return;
-      // Only check when voting is open (reduces reads); if you want, remove canVote condition
-      if (!canVote && !firstLoadRef.current) return;
-
-      const qVotes = query(
-        collection(db, 'votes'),
-        where('userId', '==', user.uid),
-        where('week', '==', weekKey)
-      );
+      const qVotes = query(collection(db, 'votes'), where('userId', '==', user.uid), where('week', '==', weekKey));
       const snapshot = await getDocs(qVotes);
       setHasVoted(!snapshot.empty);
-      firstLoadRef.current = false;
     }
+    if (user && weekKey) checkVote();
+  }, [user, weekKey]);
 
-    checkVote();
-  }, [user?.uid, weekKey, canVote]);
+  // Winner subscription (so banner shows on this page too)
+  useEffect(() => {
+    if (!weekKey) return;
+    const unsub = onSnapshot(doc(db, 'winners', weekKey), (snap) => {
+      setWinnerDoc(snap.exists() ? (snap.data() as WinnerRecord) : null);
+    });
+    return () => unsub();
+  }, [weekKey]);
+
+  // Celebrate when time is up (and decide if not already decided)
+  useEffect(() => {
+    const isOver = voteEnd > 0 && now >= voteEnd;
+    if (!isOver || !weekKey || celebratedRef.current) return;
+
+    (async () => {
+      let final = winnerDoc;
+      if (!final) final = await decideAndPersistWinner(weekKey);
+      if (final?.winner) {
+        const msgs = [
+          "We're eating ___ this week! 🎉",
+          "___ won! 👑",
+          "Cravings secured: ___ 😋",
+          "The people have spoken: ___! 🗳️",
+        ];
+        const msg = msgs[Math.floor(Math.random() * msgs.length)].replace('___', final.winner);
+        setBannerMsg(msg);
+        confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
+        setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { y: 0.7 } }), 400);
+        celebratedRef.current = true;
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [now, voteEnd, weekKey, winnerDoc]);
 
   async function castVote() {
     if (!selected || isSubmitting) return;
-
-    if (!auth.currentUser) {
-      await loginWithGoogle();
-      return;
-    }
-
-    if (!user?.email?.endsWith?.('@calvada.com')) {
-      toast.error('Only @calvada.com emails can vote');
-      return;
-    }
+    if (!auth.currentUser) { await loginWithGoogle(); return; }
+    if (!user?.email?.endsWith?.('@calvada.com')) { toast.error('Only @calvada.com emails can vote'); return; }
 
     setIsSubmitting(true);
-
     try {
       await addDoc(collection(db, 'votes'), {
         userId: user.uid,
@@ -155,7 +135,6 @@ export default function Voting({ user }: { user: any }) {
         week: weekKey,
         createdAt: serverTimestamp(),
       });
-
       toast.success('Vote submitted 🎉');
       confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
       setHasVoted(true);
@@ -170,35 +149,23 @@ export default function Voting({ user }: { user: any }) {
   if (!canVote) {
     return (
       <div className="text-center text-gray-500">
+        <Toaster position="top-center" />
+        {bannerMsg || (winnerDoc?.winner ? (
+          <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800">
+            {`${winnerDoc.winner} won! 🎉`}
+          </div>
+        ) : null)}
         <p>🕒 Voting is currently closed.</p>
         {voteStart > now && (
-          <p>
-            Opens in: <b>{formatCountdown(voteStart - now)}</b>
-          </p>
+          <p>Opens in: <b>{formatCountdown(voteStart - now)}</b></p>
         )}
       </div>
     );
   }
 
-  if (loadingOptions) {
-    return <p className="text-center text-gray-400">Loading options...</p>;
-  }
-
-  if (!choices.length) {
-    return (
-      <p className="text-center text-gray-500">
-        No options configured for this week. Admins need to regenerate the menu!
-      </p>
-    );
-  }
-
-  if (hasVoted) {
-    return (
-      <p className="text-center text-green-600">
-        ✅ You’ve already voted this week.
-      </p>
-    );
-  }
+  if (loadingOptions) return <p className="text-center text-gray-400">Loading options...</p>;
+  if (!choices.length) return <p className="text-center text-gray-500">No options configured for this week.</p>;
+  if (hasVoted) return <p className="text-center text-green-600">✅ You’ve already voted this week.</p>;
 
   return (
     <div className="mb-10">
