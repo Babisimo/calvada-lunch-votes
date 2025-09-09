@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   collection,
   addDoc,
@@ -12,29 +12,34 @@ import {
 import { db, auth, loginWithGoogle } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
 import confetti from 'canvas-confetti';
-
-const getWeekKey = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const week = Math.ceil(
-    ((+now - new Date(year, 0, 1).getTime()) / 86400000 + new Date(year, 0, 1).getDay() + 1) / 7
-  );
-  return `${year}-W${week}`;
-};
+import { useWeekKey } from './utils/useWeekKey';
+import { normalizeChoices } from './utils/normalizeChoices';
 
 function formatCountdown(ms: number) {
   if (ms <= 0) return 'Voting closed';
-
   const totalSeconds = Math.floor(ms / 1000);
   const d = Math.floor(totalSeconds / 86400);
   const h = Math.floor((totalSeconds % 86400) / 3600);
   const m = Math.floor((totalSeconds % 3600) / 60);
   const s = totalSeconds % 60;
-
   return `${d}d ${h}h ${m}m ${s}s`;
 }
 
+function toMillis(v: any): number {
+  // Accept Firestore Timestamp, ISO string, or number
+  if (!v) return 0;
+  if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v === 'string') {
+    const t = new Date(v).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  }
+  if (typeof v === 'number') return v;
+  return 0;
+}
+
 export default function Voting({ user }: { user: any }) {
+  const weekKey = useWeekKey();
+
   const [selected, setSelected] = useState('');
   const [hasVoted, setHasVoted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -44,61 +49,97 @@ export default function Voting({ user }: { user: any }) {
   const [voteEnd, setVoteEnd] = useState(0);
   const [now, setNow] = useState(Date.now());
 
-  const weekKey = getWeekKey();
-  const canVote = now >= voteStart && now <= voteEnd;
+  const canVote = useMemo(() => now >= voteStart && now <= voteEnd, [now, voteStart, voteEnd]);
+  const firstLoadRef = useRef(true);
 
+  // Keep a ticking "now"
   useEffect(() => {
-    const unsubOptions = onSnapshot(query(collection(db, 'weeklyOptions'), where('week', '==', weekKey)), (snap) => {
-      const match = snap.docs.find((doc) => doc.id === weekKey);
-      setChoices(match?.data().choices || []);
-      setLoadingOptions(false);
-    });
-
-    const unsubConfig = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
-      if (snap.exists()) {
-        const data = snap.data();
-        const start = data.start ? new Date(data.start).getTime() : 0;
-        const end = data.end ? new Date(data.end).getTime() : 0;
-        setVoteStart(start);
-        setVoteEnd(end);
-      }
-    });
-
-    return () => {
-      unsubOptions();
-      unsubConfig();
-    };
-  }, [weekKey]);
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setNow(Date.now());
-    }, 1000);
+    const interval = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(interval);
   }, []);
 
+  // Load weekly options by direct doc read (no query) + normalize
+  useEffect(() => {
+    if (!weekKey) return;
+    setLoadingOptions(true);
+
+    const unsub = onSnapshot(doc(db, 'weeklyOptions', weekKey), (snap) => {
+      if (!snap.exists()) {
+        setChoices([]);
+        setLoadingOptions(false);
+        return;
+      }
+      const normalized = normalizeChoices(snap.data()?.choices);
+      setChoices(normalized);
+      setLoadingOptions(false);
+    }, (err) => {
+      console.error('[Voting] weeklyOptions listener error:', err);
+      setChoices([]);
+      setLoadingOptions(false);
+    });
+
+    return () => unsub();
+  }, [weekKey]);
+
+  // Clear selection if the available choices change and the current selection disappears
+  useEffect(() => {
+    if (!selected) return;
+    if (!choices.includes(selected)) {
+      setSelected('');
+    }
+  }, [choices, selected]);
+
+  // Load voting window config (supports startTime/endTime or start/end)
+  useEffect(() => {
+    const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
+      if (!snap.exists()) {
+        setVoteStart(0);
+        setVoteEnd(0);
+        return;
+      }
+      const data = snap.data();
+      const startMs = toMillis(data?.startTime ?? data?.start);
+      const endMs = toMillis(data?.endTime ?? data?.end);
+      setVoteStart(startMs);
+      setVoteEnd(endMs);
+    }, (err) => {
+      console.error('[Voting] votingConfig listener error:', err);
+      setVoteStart(0);
+      setVoteEnd(0);
+    });
+
+    return () => unsub();
+  }, []);
+
+  // Has this user already voted this week?
   useEffect(() => {
     async function checkVote() {
-      const q = query(
+      if (!user?.uid || !weekKey) return;
+      // Only check when voting is open (reduces reads); if you want, remove canVote condition
+      if (!canVote && !firstLoadRef.current) return;
+
+      const qVotes = query(
         collection(db, 'votes'),
         where('userId', '==', user.uid),
         where('week', '==', weekKey)
       );
-      const snapshot = await getDocs(q);
-      if (!snapshot.empty) setHasVoted(true);
+      const snapshot = await getDocs(qVotes);
+      setHasVoted(!snapshot.empty);
+      firstLoadRef.current = false;
     }
 
-    if (user && canVote) checkVote();
-  }, [user, canVote, weekKey]);
+    checkVote();
+  }, [user?.uid, weekKey, canVote]);
 
   async function castVote() {
     if (!selected || isSubmitting) return;
+
     if (!auth.currentUser) {
       await loginWithGoogle();
       return;
     }
 
-    if (!user.email.endsWith('@calvada.com')) {
+    if (!user?.email?.endsWith?.('@calvada.com')) {
       toast.error('Only @calvada.com emails can vote');
       return;
     }
