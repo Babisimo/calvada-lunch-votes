@@ -12,43 +12,8 @@ import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
 import MenuAdmin from './MenuAdmin';
 import { useNavigate } from 'react-router-dom';
-
-const getWeekKey = () => {
-  const nowUTC = new Date();
-
-  // Convert to PST (UTC - 8 or -7 depending on DST)
-  const nowPST = new Date(
-    nowUTC.toLocaleString('en-US', { timeZone: 'America/Los_Angeles' })
-  );
-
-  // Custom reset point: Wednesday 12:00 PM PST
-  const resetHour = 12;
-  const resetDay = 3; // 0 = Sun, 3 = Wed
-
-  const day = nowPST.getDay();
-  const hour = nowPST.getHours();
-
-  // If it's before Wednesday @ 12pm, use the previous week's Wednesday
-  let wednesday = new Date(nowPST);
-  if (day < resetDay || (day === resetDay && hour < resetHour)) {
-    const diff = (7 + day - resetDay) % 7 || 7;
-    wednesday.setDate(nowPST.getDate() - diff);
-  } else {
-    const diff = (day - resetDay);
-    wednesday.setDate(nowPST.getDate() - diff);
-  }
-
-  // Lock to 12pm PST on that Wednesday
-  wednesday.setHours(resetHour, 0, 0, 0);
-
-  // Generate week key
-  const year = wednesday.getFullYear();
-  const startOfYear = new Date(Date.UTC(year, 0, 1));
-  const week = Math.ceil((wednesday.getTime() - startOfYear.getTime()) / (7 * 24 * 60 * 60 * 1000));
-
-  return `${year}-W${week}`;
-};
-
+import { useWeekKey } from './utils/useWeekKey';
+import { normalizeChoices } from './utils/normalizeChoices';
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -58,7 +23,8 @@ export default function AdminDashboard() {
   const [showMenuEditor, setShowMenuEditor] = useState(false);
   const [weeklyChoices, setWeeklyChoices] = useState<string[]>([]);
   const [hasVotes, setHasVotes] = useState(false);
-  const weekKey = getWeekKey();
+
+  const weekKey = useWeekKey();
 
   useEffect(() => {
     async function loadAdmins() {
@@ -70,13 +36,22 @@ export default function AdminDashboard() {
   }, []);
 
   useEffect(() => {
+    if (!weekKey) return;
+
     const unsubOptions = onSnapshot(doc(db, 'weeklyOptions', weekKey), (snap) => {
-      setWeeklyChoices(snap.exists() ? snap.data().choices || [] : []);
+      if (!snap.exists()) {
+        setWeeklyChoices([]);
+        return;
+      }
+      const normalized = normalizeChoices(snap.data().choices);
+      setWeeklyChoices(normalized);
     });
 
     const unsubVotes = onSnapshot(collection(db, 'votes'), (snap) => {
-      const votedThisWeek = snap.docs.some(doc => doc.data().week === weekKey);
+      const votedThisWeek = snap.docs.some((d) => d.data().week === weekKey);
       setHasVotes(votedThisWeek);
+    }, (err) => {
+      console.error('[AdminDashboard] votes listener error:', err);
     });
 
     return () => {
@@ -128,7 +103,7 @@ export default function AdminDashboard() {
   const regenerateWeeklyOptions = async () => {
     try {
       const snapshot = await getDocs(collection(db, 'menu'));
-      const allOptions = snapshot.docs.map(doc => doc.data().name);
+      const allOptions = snapshot.docs.map((d) => (d.data().name ?? '').toString().trim()).filter(Boolean);
       if (allOptions.length < 4) {
         toast.error('Need at least 4 menu items to regenerate weekly options.');
         return;
@@ -150,7 +125,7 @@ export default function AdminDashboard() {
   const handleRemoveWeeklyOption = async (choice: string) => {
     if (!confirm(`Remove "${choice}" from this week's options?`)) return;
     try {
-      const updated = weeklyChoices.filter(item => item !== choice);
+      const updated = weeklyChoices.filter((item) => item !== choice);
       await setDoc(doc(db, 'weeklyOptions', weekKey), {
         choices: updated,
         week: weekKey,
@@ -192,7 +167,7 @@ export default function AdminDashboard() {
             <ul className="space-y-2 text-left mb-4">
               {weeklyChoices.map((choice, index) => (
                 <li
-                  key={index}
+                  key={`${choice}-${index}`}
                   className="flex justify-between items-center px-4 py-2 bg-gray-50 rounded text-gray-900"
                 >
                   <span>{index + 1}. {choice}</span>
@@ -212,10 +187,11 @@ export default function AdminDashboard() {
           <button
             onClick={regenerateWeeklyOptions}
             disabled={hasVotes}
-            className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${hasVotes
-              ? 'bg-gray-400 cursor-not-allowed'
-              : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-md'
-              }`}
+            className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${
+              hasVotes
+                ? 'bg-gray-400 cursor-not-allowed'
+                : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-md'
+            }`}
           >
             🔄 Regenerate This Week’s Options
           </button>

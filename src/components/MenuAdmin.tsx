@@ -9,15 +9,8 @@ import {
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
-
-const getWeekKey = () => {
-  const now = new Date();
-  const year = now.getFullYear();
-  const week = Math.ceil(
-    ((+now - new Date(year, 0, 1).getTime()) / 86400000 + new Date(year, 0, 1).getDay() + 1) / 7
-  );
-  return `${year}-W${week}`;
-};
+import { useWeekKey } from './utils/useWeekKey';
+import { normalizeChoices } from './utils/normalizeChoices';
 
 export default function MenuAdmin() {
   const [menuItems, setMenuItems] = useState<{ id: string; name: string }[]>([]);
@@ -28,19 +21,22 @@ export default function MenuAdmin() {
   const [editText, setEditText] = useState('');
 
   const menuRef = collection(db, 'menu');
-  const weekKey = getWeekKey();
+  const weekKey = useWeekKey();
 
   useEffect(() => {
     const unsubMenu = onSnapshot(menuRef, (snapshot) => {
-      const items = snapshot.docs.map((doc) => ({ id: doc.id, name: doc.data().name }));
+      const items = snapshot.docs.map((d) => ({ id: d.id, name: d.data().name }));
       setMenuItems(items);
       setLoading(false);
     });
 
-    const unsubWeekly = onSnapshot(doc(db, 'weeklyOptions', weekKey), (docSnap) => {
+    if (!weekKey) return () => unsubMenu();
+
+    const weeklyRef = doc(db, 'weeklyOptions', weekKey);
+    const unsubWeekly = onSnapshot(weeklyRef, (docSnap) => {
       if (docSnap.exists()) {
-        const data = docSnap.data();
-        setWeeklyOptions(data.choices || []);
+        const normalized = normalizeChoices(docSnap.data().choices);
+        setWeeklyOptions(normalized);
       } else {
         setWeeklyOptions([]);
       }
@@ -89,6 +85,7 @@ export default function MenuAdmin() {
   };
 
   const handleAddToWeekly = async (name: string) => {
+    if (!weekKey) return;
     if (weeklyOptions.includes(name)) {
       toast('Already in weekly options!');
       return;
@@ -134,8 +131,9 @@ export default function MenuAdmin() {
             return (
               <li
                 key={item.id}
-                className={`flex justify-between items-center px-4 py-2 rounded-md shadow-sm border ${isSelected ? 'border-green-500 bg-green-50' : 'bg-gray-50'
-                  }`}
+                className={`flex justify-between items-center px-4 py-2 rounded-md shadow-sm border ${
+                  isSelected ? 'border-green-500 bg-green-50' : 'bg-gray-50'
+                }`}
               >
                 {editingId === item.id ? (
                   <>
