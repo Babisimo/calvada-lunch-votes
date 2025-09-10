@@ -5,7 +5,8 @@ import {
   deleteDoc,
   doc,
   setDoc,
-  onSnapshot
+  onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
@@ -94,8 +95,9 @@ export default function MenuAdmin() {
     const updated = [...weeklyOptions, name];
     await setDoc(doc(db, 'weeklyOptions', weekKey), {
       week: weekKey,
-      choices: updated
-    });
+      choices: updated,
+      updatedAt: serverTimestamp(),
+    }, { merge: true });
     toast.success(`✅ "${name}" added to weekly options`);
   };
 

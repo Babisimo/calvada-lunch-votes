@@ -19,19 +19,22 @@ export default function AdminVotersPage() {
         const votesQuery = query(collection(db, 'votes'), orderBy('createdAt', 'desc'));
         const snapshot = await getDocs(votesQuery);
         const loadedVotes: Vote[] = snapshot.docs.map(doc => {
-          const data = doc.data();
+          const data = doc.data() as any;
+          const secs = data?.createdAt?.seconds ?? null;
           return {
             name: data.userName,
             email: data.userEmail,
             choice: data.choice,
-            timestamp: new Date(data.createdAt?.seconds * 1000).toLocaleString('en-US', {
-              year: 'numeric',
-              month: '2-digit',
-              day: '2-digit',
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true,
-            }),
+            timestamp: secs
+              ? new Date(secs * 1000).toLocaleString('en-US', {
+                  year: 'numeric',
+                  month: '2-digit',
+                  day: '2-digit',
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true,
+                })
+              : '—',
           };
         });
         setVoters(loadedVotes);

@@ -7,6 +7,7 @@ import {
   doc,
   setDoc,
   onSnapshot,
+  serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
@@ -113,7 +114,9 @@ export default function AdminDashboard() {
       await setDoc(doc(db, 'weeklyOptions', weekKey), {
         choices: shuffled,
         week: weekKey,
-      });
+        updatedAt: serverTimestamp(),
+        winner: null, // <— clear any previously embedded winner
+      }, { merge: true });
 
       toast.success('✅ New weekly options generated!');
     } catch (err) {
@@ -129,7 +132,8 @@ export default function AdminDashboard() {
       await setDoc(doc(db, 'weeklyOptions', weekKey), {
         choices: updated,
         week: weekKey,
-      });
+        updatedAt: serverTimestamp(),
+      }, { merge: true });
       toast.success('Option removed!');
     } catch (err) {
       toast.error('Failed to remove option');
@@ -187,11 +191,10 @@ export default function AdminDashboard() {
           <button
             onClick={regenerateWeeklyOptions}
             disabled={hasVotes}
-            className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${
-              hasVotes
+            className={`w-full py-3 text-white rounded-lg font-semibold shadow transition-all ${hasVotes
                 ? 'bg-gray-400 cursor-not-allowed'
                 : 'bg-gradient-to-r from-indigo-600 to-purple-600 hover:shadow-md'
-            }`}
+              }`}
           >
             🔄 Regenerate This Week’s Options
           </button>

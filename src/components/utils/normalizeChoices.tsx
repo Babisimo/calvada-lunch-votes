@@ -1,18 +1,20 @@
-// Ensures Firestore 'choices' yields a clean string[]
+// Ensures Firestore 'choices' yields a clean, de-duped string[]
 export function normalizeChoices(raw: any): string[] {
-  try {
-    if (Array.isArray(raw)) {
-      return raw
-        .map((v) => (typeof v === 'string' ? v.trim() : ''))
-        .filter((v) => v.length > 0);
-    }
-    if (raw && typeof raw === 'object') {
-      return Object.values(raw)
-        .map((v) => (typeof v === 'string' ? v.trim() : ''))
-        .filter((v) => v.length > 0);
-    }
-  } catch {
-    // ignore
+  let arr: any[] = [];
+  if (Array.isArray(raw)) arr = raw;
+  else if (raw && typeof raw === 'object') arr = Object.values(raw);
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+
+  for (const v of arr) {
+    if (typeof v !== 'string') continue;
+    const s = v.trim();
+    if (!s) continue;
+    const key = s.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(s);
   }
-  return [];
+  return out;
 }

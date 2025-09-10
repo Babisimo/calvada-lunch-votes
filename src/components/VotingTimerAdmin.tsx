@@ -1,10 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../firebaseConfig';
-import {
-  doc,
-  setDoc,
-  onSnapshot
-} from 'firebase/firestore';
+import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 
 export default function VotingTimerAdmin() {
@@ -15,19 +11,17 @@ export default function VotingTimerAdmin() {
   const [status, setStatus] = useState('');
   const [countdown, setCountdown] = useState('');
 
-  // Load timer config from Firestore
   useEffect(() => {
     const unsub = onSnapshot(configRef, (snap) => {
       const data = snap.data();
       if (data?.start && data?.end) {
-        setStart(data.start); // string in local ISO format
+        setStart(data.start);
         setEnd(data.end);
       }
     });
     return unsub;
   }, []);
 
-  // Countdown + Status Label Logic
   useEffect(() => {
     const interval = setInterval(() => {
       if (!start || !end) return;
@@ -71,10 +65,7 @@ export default function VotingTimerAdmin() {
     }
 
     try {
-      await setDoc(configRef, {
-        start, // Save raw local string
-        end
-      });
+      await setDoc(configRef, { start, end });
       toast.success('Voting timer updated!');
     } catch (err) {
       console.error(err);

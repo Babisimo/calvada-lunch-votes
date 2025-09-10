@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../firebaseConfig';
-import { collection, getDocs, orderBy, query } from 'firebase/firestore';
+import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
 
 type WinnerListItem = {
   week: string;
@@ -13,18 +13,27 @@ export default function WinnersList() {
 
   useEffect(() => {
     const run = async () => {
-      const q = query(collection(db, 'winners'), orderBy('decidedAt', 'desc'));
-      const snap = await getDocs(q);
-      const arr: WinnerListItem[] = [];
-      snap.forEach(d => {
-        const data = d.data() as any;
-        arr.push({
-          week: data.week,
-          winner: data.winner,
-          decidedAt: data.decidedAt,
+      try {
+        const q = query(
+          collection(db, 'weeklyOptions'),
+          where('winner.decidedAt', '>', new Date(0)),
+          orderBy('winner.decidedAt', 'desc')
+        );
+        const snap = await getDocs(q);
+        const arr: WinnerListItem[] = [];
+        snap.forEach(d => {
+          const data = d.data() as any;
+          arr.push({
+            week: data.week || d.id,
+            winner: data?.winner?.name || '—',
+            decidedAt: data?.winner?.decidedAt,
+          });
         });
-      });
-      setItems(arr);
+        setItems(arr);
+      } catch (err) {
+        console.error('[WinnersList] load error:', err);
+        setItems([]);
+      }
     };
     run();
   }, []);

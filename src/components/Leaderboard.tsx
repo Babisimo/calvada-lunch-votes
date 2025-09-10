@@ -5,7 +5,7 @@ import {
 } from 'firebase/firestore';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
-import { decideAndPersistWinner, type WinnerRecord } from './services/winner';
+import { decideAndPersistWinnerInWeeklyDoc, type WeeklyWinner } from './services/winner';
 import confetti from 'canvas-confetti';
 
 const colors = ['bg-blue-500','bg-green-500','bg-purple-500','bg-yellow-500','bg-pink-500','bg-red-500'];
@@ -21,10 +21,7 @@ const CELEBRATION_MESSAGES = [
 function toMillis(v: any): number {
   if (!v) return 0;
   if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
-  if (typeof v === 'string') {
-    const t = new Date(v).getTime();
-    return Number.isNaN(t) ? 0 : t;
-  }
+  if (typeof v === 'string') { const t = new Date(v).getTime(); return Number.isNaN(t) ? 0 : t; }
   if (typeof v === 'number') return v;
   return 0;
 }
@@ -33,11 +30,12 @@ export default function Leaderboard() {
   const weekKey = useWeekKey();
 
   const [weeklyChoices, setWeeklyChoices] = useState<string[]>([]);
+  const [weeklyUpdatedAtMs, setWeeklyUpdatedAtMs] = useState<number>(0);
+  const [weeklyWinner, setWeeklyWinner] = useState<WeeklyWinner | null>(null);
+
   const [results, setResults] = useState<{ choice: string; count: number }[]>([]);
   const [totalVotes, setTotalVotes] = useState(0);
   const [endTimeMs, setEndTimeMs] = useState<number | null>(null);
-  const [winnerDoc, setWinnerDoc] = useState<WinnerRecord | null>(null);
-  const [celebrationMsg, setCelebrationMsg] = useState('');
   const [now, setNow] = useState(Date.now());
   const hasCelebratedRef = useRef(false);
 
@@ -47,16 +45,20 @@ export default function Leaderboard() {
     return () => clearInterval(id);
   }, []);
 
-  // weekly options
+  // weekly options (+ updatedAt + embedded winner)
   useEffect(() => {
     if (!weekKey) return;
     const unsub = onSnapshot(doc(db, 'weeklyOptions', weekKey), (snap) => {
-      setWeeklyChoices(snap.exists() ? normalizeChoices(snap.data()?.choices) : []);
+      if (!snap.exists()) { setWeeklyChoices([]); setWeeklyUpdatedAtMs(0); setWeeklyWinner(null); return; }
+      const data = snap.data();
+      setWeeklyChoices(normalizeChoices(data?.choices));
+      setWeeklyUpdatedAtMs(toMillis(data?.updatedAt));
+      setWeeklyWinner((data?.winner ?? null) as WeeklyWinner | null);
     });
     return () => unsub();
   }, [weekKey]);
 
-  // votes (use collectionGroup to catch any nested 'votes'; fallback to top-level)
+  // votes (collectionGroup with fallback)
   useEffect(() => {
     if (!weekKey) return;
     let unsub: (() => void) | null = null;
@@ -120,54 +122,51 @@ export default function Leaderboard() {
     return () => unsub();
   }, []);
 
-  // winner subscription (so banner persists on refresh)
-  useEffect(() => {
-    if (!weekKey) return;
-    const unsub = onSnapshot(doc(db, 'winners', weekKey), (snap) => {
-      setWinnerDoc(snap.exists() ? (snap.data() as WinnerRecord) : null);
-    });
-    return () => unsub();
-  }, [weekKey]);
+  // Banner gating: only after voting ends AND winner decided after latest options update
+  // AND there was at least one vote
+  const decidedAtMs = toMillis(weeklyWinner?.decidedAt);
+  const shouldShowWinnerBanner =
+    !!weeklyWinner?.name &&
+    !!endTimeMs &&
+    now >= endTimeMs &&
+    totalVotes > 0 &&
+    (weeklyUpdatedAtMs === 0 || decidedAtMs >= weeklyUpdatedAtMs);
 
-  // decide + celebrate when time is up
+  // Decide winner once when window ends (service NO-OPs if zero votes)
   useEffect(() => {
     const isOver = !!endTimeMs && now >= endTimeMs;
-    if (!isOver || !weekKey || hasCelebratedRef.current) return;
+    if (!isOver || !weekKey) return;
+    if (!weeklyWinner || decidedAtMs < weeklyUpdatedAtMs) {
+      decideAndPersistWinnerInWeeklyDoc(weekKey).catch((e) =>
+        console.error('[Leaderboard] decide winner error', e)
+      );
+    }
+  }, [endTimeMs, now, weekKey, weeklyWinner, decidedAtMs, weeklyUpdatedAtMs]);
 
-    (async () => {
-      let final = winnerDoc;
-      if (!final) final = await decideAndPersistWinner(weekKey);
-      if (final?.winner) {
-        const msg = CELEBRATION_MESSAGES[Math.floor(Math.random() * CELEBRATION_MESSAGES.length)]
-          .replace('___', final.winner);
-        setCelebrationMsg(msg);
-        party();
-        hasCelebratedRef.current = true;
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [endTimeMs, now, weekKey, winnerDoc]);
+  // Fire confetti ONCE when the banner becomes visible
+  useEffect(() => {
+    if (shouldShowWinnerBanner && !hasCelebratedRef.current) {
+      confetti({ particleCount: 80, spread: 70, origin: { y: 0.7 } });
+      setTimeout(() => confetti({ particleCount: 60, spread: 90, startVelocity: 45, origin: { y: 0.6 } }), 300);
+      setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { y: 0.8 } }), 650);
+      hasCelebratedRef.current = true;
+    }
+  }, [shouldShowWinnerBanner]);
 
-  const party = () => {
-    confetti({ particleCount: 80, spread: 70, origin: { y: 0.7 } });
-    setTimeout(() => confetti({ particleCount: 60, spread: 90, startVelocity: 45, origin: { y: 0.6 } }), 300);
-    setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { y: 0.8 } }), 650);
-  };
-
+  // Deterministic single-line banner text (prevents double messages)
   const bannerText = useMemo(() => {
-    if (celebrationMsg) return celebrationMsg;
-    if (winnerDoc?.winner) return `${winnerDoc.winner} won! 🎉`;
-    return '';
-  }, [celebrationMsg, winnerDoc?.winner]);
+    if (!weeklyWinner?.name) return '';
+    const idx = decidedAtMs ? decidedAtMs % CELEBRATION_MESSAGES.length : 0;
+    return CELEBRATION_MESSAGES[idx].replace('___', weeklyWinner.name);
+  }, [weeklyWinner?.name, decidedAtMs]);
 
   return (
     <div className="mb-10">
       <h2 className="text-2xl font-semibold mb-4 text-center">📊 Leaderboard</h2>
 
-      {winnerDoc?.winner && (
+      {shouldShowWinnerBanner && (
         <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center shadow-sm">
           <div className="text-lg font-semibold text-emerald-800">{bannerText}</div>
-          
         </div>
       )}
 
@@ -177,7 +176,7 @@ export default function Leaderboard() {
         <ul className="space-y-4">
           {results.map((r, idx) => {
             const percentage = totalVotes > 0 ? (r.count / totalVotes) * 100 : 0;
-            const isWinner = winnerDoc?.winner === r.choice;
+            const isWinner = shouldShowWinnerBanner && weeklyWinner?.name === r.choice;
             return (
               <li key={`${r.choice}-${idx}`} className={isWinner ? 'ring-2 ring-emerald-400 rounded-lg p-2' : ''}>
                 <div className="flex justify-between mb-1">

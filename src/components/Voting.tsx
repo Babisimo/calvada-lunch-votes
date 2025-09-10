@@ -1,13 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  collection, addDoc, getDocs, query, where, serverTimestamp, onSnapshot, doc
+  collection,
+  addDoc,
+  getDocs,
+  query,
+  where,
+  serverTimestamp,
+  onSnapshot,
+  doc,
 } from 'firebase/firestore';
 import { db, auth, loginWithGoogle } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
 import confetti from 'canvas-confetti';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
-import { decideAndPersistWinner, type WinnerRecord } from './services/winner';
+import { decideAndPersistWinnerInWeeklyDoc, type WeeklyWinner } from './services/winner';
 
 function formatCountdown(ms: number) {
   if (ms <= 0) return 'Voting closed';
@@ -32,14 +39,17 @@ export default function Voting({ user }: { user: any }) {
   const [selected, setSelected] = useState('');
   const [hasVoted, setHasVoted] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
   const [choices, setChoices] = useState<string[]>([]);
+  const [weeklyUpdatedAtMs, setWeeklyUpdatedAtMs] = useState(0);
+  const [weeklyWinner, setWeeklyWinner] = useState<WeeklyWinner | null>(null);
+
   const [loadingOptions, setLoadingOptions] = useState(true);
   const [voteStart, setVoteStart] = useState(0);
   const [voteEnd, setVoteEnd] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const [winnerDoc, setWinnerDoc] = useState<WinnerRecord | null>(null);
-  const [bannerMsg, setBannerMsg] = useState('');
-  const celebratedRef = useRef(false);
+  const [totalVotes, setTotalVotes] = useState(0);
+  const hasCelebratedRef = useRef(false);
 
   const canVote = useMemo(() => now >= voteStart && now <= voteEnd, [now, voteStart, voteEnd]);
 
@@ -48,23 +58,41 @@ export default function Voting({ user }: { user: any }) {
     return () => clearInterval(id);
   }, []);
 
-  // Options
+  // options + winner
   useEffect(() => {
     if (!weekKey) return;
     setLoadingOptions(true);
     const unsub = onSnapshot(doc(db, 'weeklyOptions', weekKey), (snap) => {
-      setChoices(snap.exists() ? normalizeChoices(snap.data()?.choices) : []);
+      if (!snap.exists()) {
+        setChoices([]);
+        setWeeklyUpdatedAtMs(0);
+        setWeeklyWinner(null);
+        setLoadingOptions(false);
+        return;
+      }
+      const data = snap.data() as any;
+      setChoices(normalizeChoices(data?.choices));
+      setWeeklyUpdatedAtMs(toMillis(data?.updatedAt));
+      setWeeklyWinner((data?.winner ?? null) as WeeklyWinner | null);
       setLoadingOptions(false);
     }, () => setLoadingOptions(false));
     return () => unsub();
   }, [weekKey]);
 
-  // Clear selection if choices change
+  // votes count (to suppress banner on zero votes)
+  useEffect(() => {
+    if (!weekKey) return;
+    const qVotes = query(collection(db, 'votes'), where('week', '==', weekKey));
+    const unsub = onSnapshot(qVotes, (snap) => setTotalVotes(snap.size));
+    return () => unsub();
+  }, [weekKey]);
+
+  // clear selection if options changed
   useEffect(() => {
     if (selected && !choices.includes(selected)) setSelected('');
   }, [choices, selected]);
 
-  // Window
+  // voting window
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
       if (!snap.exists()) { setVoteStart(0); setVoteEnd(0); return; }
@@ -75,55 +103,61 @@ export default function Voting({ user }: { user: any }) {
     return () => unsub();
   }, []);
 
-  // Already voted?
+  // already voted?
   useEffect(() => {
     async function checkVote() {
       if (!user?.uid || !weekKey) return;
-      const qVotes = query(collection(db, 'votes'), where('userId', '==', user.uid), where('week', '==', weekKey));
+      const qVotes = query(
+        collection(db, 'votes'),
+        where('userId', '==', user.uid),
+        where('week', '==', weekKey)
+      );
       const snapshot = await getDocs(qVotes);
       setHasVoted(!snapshot.empty);
     }
     if (user && weekKey) checkVote();
   }, [user, weekKey]);
 
-  // Winner subscription (so banner shows on this page too)
-  useEffect(() => {
-    if (!weekKey) return;
-    const unsub = onSnapshot(doc(db, 'winners', weekKey), (snap) => {
-      setWinnerDoc(snap.exists() ? (snap.data() as WinnerRecord) : null);
-    });
-    return () => unsub();
-  }, [weekKey]);
+  // banner gating (also requires totalVotes > 0)
+  const decidedAtMs = toMillis(weeklyWinner?.decidedAt);
+  const shouldShowWinnerBanner =
+    !!weeklyWinner?.name &&
+    voteEnd > 0 &&
+    now >= voteEnd &&
+    totalVotes > 0 &&
+    (weeklyUpdatedAtMs === 0 || decidedAtMs >= weeklyUpdatedAtMs);
 
-  // Celebrate when time is up (and decide if not already decided)
+  // Decide winner when window ends (NO-OP if zero votes)
   useEffect(() => {
     const isOver = voteEnd > 0 && now >= voteEnd;
-    if (!isOver || !weekKey || celebratedRef.current) return;
+    if (!isOver || !weekKey) return;
+    if (!weeklyWinner || decidedAtMs < weeklyUpdatedAtMs) {
+      decideAndPersistWinnerInWeeklyDoc(weekKey).catch((e) =>
+        console.error('[Voting] decide winner error', e)
+      );
+    }
+  }, [now, voteEnd, weekKey, weeklyWinner, decidedAtMs, weeklyUpdatedAtMs]);
 
-    (async () => {
-      let final = winnerDoc;
-      if (!final) final = await decideAndPersistWinner(weekKey);
-      if (final?.winner) {
-        const msgs = [
-          "We're eating ___ this week! 🎉",
-          "___ won! 👑",
-          "Cravings secured: ___ 😋",
-          "The people have spoken: ___! 🗳️",
-        ];
-        const msg = msgs[Math.floor(Math.random() * msgs.length)].replace('___', final.winner);
-        setBannerMsg(msg);
-        confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
-        setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { y: 0.7 } }), 400);
-        celebratedRef.current = true;
-      }
-    })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [now, voteEnd, weekKey, winnerDoc]);
+  // Celebrate once when banner becomes visible
+  useEffect(() => {
+    if (shouldShowWinnerBanner && !hasCelebratedRef.current) {
+      confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
+      setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { y: 0.7 } }), 350);
+      hasCelebratedRef.current = true;
+    }
+  }, [shouldShowWinnerBanner]);
 
   async function castVote() {
     if (!selected || isSubmitting) return;
-    if (!auth.currentUser) { await loginWithGoogle(); return; }
-    if (!user?.email?.endsWith?.('@calvada.com')) { toast.error('Only @calvada.com emails can vote'); return; }
+
+    if (!auth.currentUser) {
+      await loginWithGoogle();
+      return;
+    }
+    if (!user?.email?.endsWith?.('@calvada.com')) {
+      toast.error('Only @calvada.com emails can vote');
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -150,14 +184,25 @@ export default function Voting({ user }: { user: any }) {
     return (
       <div className="text-center text-gray-500">
         <Toaster position="top-center" />
-        {bannerMsg || (winnerDoc?.winner ? (
+        {shouldShowWinnerBanner ? (
           <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800">
-            {`${winnerDoc.winner} won! 🎉`}
+            {(() => {
+              const msgs = [
+                "We're eating ___ this week! 🎉",
+                '___ won! 👑',
+                'Cravings secured: ___ 😋',
+                'The people have spoken: ___! 🗳️',
+              ];
+              const idx = decidedAtMs ? decidedAtMs % msgs.length : 0;
+              return msgs[idx].replace('___', weeklyWinner?.name ?? '');
+            })()}
           </div>
-        ) : null)}
+        ) : null}
         <p>🕒 Voting is currently closed.</p>
         {voteStart > now && (
-          <p>Opens in: <b>{formatCountdown(voteStart - now)}</b></p>
+          <p>
+            Opens in: <b>{formatCountdown(voteStart - now)}</b>
+          </p>
         )}
       </div>
     );
