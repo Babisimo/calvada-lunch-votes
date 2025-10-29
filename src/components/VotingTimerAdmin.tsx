@@ -11,6 +11,24 @@ export default function VotingTimerAdmin() {
   const [status, setStatus] = useState('');
   const [countdown, setCountdown] = useState('');
 
+  // Helper
+  function isoWeekKeyFromLocal(startIsoLocal: string): string {
+    // startIsoLocal is like "2025-10-27T07:00" (local)
+    const d = new Date(startIsoLocal); // local time
+    // ISO week algorithm
+    const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+    // Set to nearest Thursday: current date + 4 - current day number (Mon=1, Sun=7)
+    const dayNr = (target.getUTCDay() + 6) % 7; // Mon=0..Sun=6
+    target.setUTCDate(target.getUTCDate() - dayNr + 3);
+    const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
+    const week = 1 + Math.round(
+      ((target.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7
+    );
+    const year = target.getUTCFullYear();
+    const ww = String(week).padStart(2, '0');
+    return `${year}-W${ww}`;
+  }
+
   useEffect(() => {
     const unsub = onSnapshot(configRef, (snap) => {
       const data = snap.data();
@@ -65,8 +83,13 @@ export default function VotingTimerAdmin() {
     }
 
     try {
-      await setDoc(configRef, { start, end });
-      toast.success('Voting timer updated!');
+      const weekKey = isoWeekKeyFromLocal(start);
+
+      await setDoc(configRef, { start, end }, { merge: true });
+      // 🔑 single source of truth for the whole app:
+      await setDoc(doc(db, 'config', 'currentWeek'), { value: weekKey }, { merge: true });
+
+      toast.success(`Voting timer updated! Week set to ${weekKey}`);
     } catch (err) {
       console.error(err);
       toast.error('Failed to update timer.');

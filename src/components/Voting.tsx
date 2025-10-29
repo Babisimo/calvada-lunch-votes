@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+// src/components/Voting.tsx
+import { useEffect, useMemo, useState } from 'react';
 import {
   collection,
   addDoc,
@@ -11,10 +12,8 @@ import {
 } from 'firebase/firestore';
 import { db, auth, loginWithGoogle } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
-import confetti from 'canvas-confetti';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
-import { decideAndPersistWinnerInWeeklyDoc, type WeeklyWinner } from './services/winner';
 
 function formatCountdown(ms: number) {
   if (ms <= 0) return 'Voting closed';
@@ -28,7 +27,10 @@ function formatCountdown(ms: number) {
 function toMillis(v: any): number {
   if (!v) return 0;
   if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
-  if (typeof v === 'string') { const t = new Date(v).getTime(); return Number.isNaN(t) ? 0 : t; }
+  if (typeof v === 'string') {
+    const t = new Date(v).getTime();
+    return Number.isNaN(t) ? 0 : t;
+  }
   if (typeof v === 'number') return v;
   return 0;
 }
@@ -41,49 +43,38 @@ export default function Voting({ user }: { user: any }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [choices, setChoices] = useState<string[]>([]);
-  const [weeklyUpdatedAtMs, setWeeklyUpdatedAtMs] = useState(0);
-  const [weeklyWinner, setWeeklyWinner] = useState<WeeklyWinner | null>(null);
-
   const [loadingOptions, setLoadingOptions] = useState(true);
+
   const [voteStart, setVoteStart] = useState(0);
   const [voteEnd, setVoteEnd] = useState(0);
   const [now, setNow] = useState(Date.now());
-  const [totalVotes, setTotalVotes] = useState(0);
-  const hasCelebratedRef = useRef(false);
 
   const canVote = useMemo(() => now >= voteStart && now <= voteEnd, [now, voteStart, voteEnd]);
 
+  // tick "now"
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  // options + winner
+  // load options from weeklyOptions/{weekKey}
   useEffect(() => {
     if (!weekKey) return;
     setLoadingOptions(true);
-    const unsub = onSnapshot(doc(db, 'weeklyOptions', weekKey), (snap) => {
-      if (!snap.exists()) {
-        setChoices([]);
-        setWeeklyUpdatedAtMs(0);
-        setWeeklyWinner(null);
+    const unsub = onSnapshot(
+      doc(db, 'weeklyOptions', weekKey),
+      (snap) => {
+        if (!snap.exists()) {
+          setChoices([]);
+          setLoadingOptions(false);
+          return;
+        }
+        const data = snap.data() as any;
+        setChoices(normalizeChoices(data?.choices));
         setLoadingOptions(false);
-        return;
-      }
-      const data = snap.data() as any;
-      setChoices(normalizeChoices(data?.choices));
-      setWeeklyUpdatedAtMs(toMillis(data?.updatedAt));
-      setWeeklyWinner((data?.winner ?? null) as WeeklyWinner | null);
-      setLoadingOptions(false);
-    }, () => setLoadingOptions(false));
-    return () => unsub();
-  }, [weekKey]);
-
-  // votes count (to suppress banner on zero votes)
-  useEffect(() => {
-    if (!weekKey) return;
-    const qVotes = query(collection(db, 'votes'), where('week', '==', weekKey));
-    const unsub = onSnapshot(qVotes, (snap) => setTotalVotes(snap.size));
+      },
+      () => setLoadingOptions(false)
+    );
     return () => unsub();
   }, [weekKey]);
 
@@ -95,7 +86,11 @@ export default function Voting({ user }: { user: any }) {
   // voting window
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
-      if (!snap.exists()) { setVoteStart(0); setVoteEnd(0); return; }
+      if (!snap.exists()) {
+        setVoteStart(0);
+        setVoteEnd(0);
+        return;
+      }
       const data = snap.data();
       setVoteStart(toMillis(data?.startTime ?? data?.start));
       setVoteEnd(toMillis(data?.endTime ?? data?.end));
@@ -118,35 +113,7 @@ export default function Voting({ user }: { user: any }) {
     if (user && weekKey) checkVote();
   }, [user, weekKey]);
 
-  // banner gating (also requires totalVotes > 0)
-  const decidedAtMs = toMillis(weeklyWinner?.decidedAt);
-  const shouldShowWinnerBanner =
-    !!weeklyWinner?.name &&
-    voteEnd > 0 &&
-    now >= voteEnd &&
-    totalVotes > 0 &&
-    (weeklyUpdatedAtMs === 0 || decidedAtMs >= weeklyUpdatedAtMs);
-
-  // Decide winner when window ends (NO-OP if zero votes)
-  useEffect(() => {
-    const isOver = voteEnd > 0 && now >= voteEnd;
-    if (!isOver || !weekKey) return;
-    if (!weeklyWinner || decidedAtMs < weeklyUpdatedAtMs) {
-      decideAndPersistWinnerInWeeklyDoc(weekKey).catch((e) =>
-        console.error('[Voting] decide winner error', e)
-      );
-    }
-  }, [now, voteEnd, weekKey, weeklyWinner, decidedAtMs, weeklyUpdatedAtMs]);
-
-  // Celebrate once when banner becomes visible
-  useEffect(() => {
-    if (shouldShowWinnerBanner && !hasCelebratedRef.current) {
-      confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
-      setTimeout(() => confetti({ particleCount: 120, spread: 100, origin: { y: 0.7 } }), 350);
-      hasCelebratedRef.current = true;
-    }
-  }, [shouldShowWinnerBanner]);
-
+  // cast vote
   async function castVote() {
     if (!selected || isSubmitting) return;
 
@@ -154,12 +121,14 @@ export default function Voting({ user }: { user: any }) {
       await loginWithGoogle();
       return;
     }
+
     if (!user?.email?.endsWith?.('@calvada.com')) {
       toast.error('Only @calvada.com emails can vote');
       return;
     }
 
     setIsSubmitting(true);
+
     try {
       await addDoc(collection(db, 'votes'), {
         userId: user.uid,
@@ -169,8 +138,8 @@ export default function Voting({ user }: { user: any }) {
         week: weekKey,
         createdAt: serverTimestamp(),
       });
+
       toast.success('Vote submitted 🎉');
-      confetti({ particleCount: 100, spread: 80, origin: { y: 0.6 } });
       setHasVoted(true);
     } catch (err) {
       toast.error('Something went wrong');
@@ -180,24 +149,12 @@ export default function Voting({ user }: { user: any }) {
     }
   }
 
+  /** render */
   if (!canVote) {
     return (
       <div className="text-center text-gray-500">
         <Toaster position="top-center" />
-        {shouldShowWinnerBanner ? (
-          <div className="mb-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-emerald-800">
-            {(() => {
-              const msgs = [
-                "We're eating ___ this week! 🎉",
-                '___ won! 👑',
-                'Cravings secured: ___ 😋',
-                'The people have spoken: ___! 🗳️',
-              ];
-              const idx = decidedAtMs ? decidedAtMs % msgs.length : 0;
-              return msgs[idx].replace('___', weeklyWinner?.name ?? '');
-            })()}
-          </div>
-        ) : null}
+        {/* No winner banner here — Leaderboard owns the banner */}
         <p>🕒 Voting is currently closed.</p>
         {voteStart > now && (
           <p>

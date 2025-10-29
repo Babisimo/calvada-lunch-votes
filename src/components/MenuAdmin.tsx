@@ -1,17 +1,12 @@
 import { useEffect, useState } from 'react';
 import {
-  collection,
-  addDoc,
-  deleteDoc,
-  doc,
-  setDoc,
-  onSnapshot,
-  serverTimestamp,
+  collection, addDoc, deleteDoc, doc, setDoc, onSnapshot, serverTimestamp,
 } from 'firebase/firestore';
 import { db } from '../../firebaseConfig';
 import toast, { Toaster } from 'react-hot-toast';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
+import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
 
 export default function MenuAdmin() {
   const [menuItems, setMenuItems] = useState<{ id: string; name: string }[]>([]);
@@ -24,29 +19,23 @@ export default function MenuAdmin() {
   const menuRef = collection(db, 'menu');
   const weekKey = useWeekKey();
 
+  // Menu list
   useEffect(() => {
     const unsubMenu = onSnapshot(menuRef, (snapshot) => {
       const items = snapshot.docs.map((d) => ({ id: d.id, name: d.data().name }));
       setMenuItems(items);
       setLoading(false);
     });
+    return () => unsubMenu();
+  }, []);
 
-    if (!weekKey) return () => unsubMenu();
-
-    const weeklyRef = doc(db, 'weeklyOptions', weekKey);
-    const unsubWeekly = onSnapshot(weeklyRef, (docSnap) => {
-      if (docSnap.exists()) {
-        const normalized = normalizeChoices(docSnap.data().choices);
-        setWeeklyOptions(normalized);
-      } else {
-        setWeeklyOptions([]);
-      }
+  // Direct weeklyOptions listener
+  useEffect(() => {
+    if (!weekKey) { setWeeklyOptions([]); return; }
+    return subscribeWeeklyOptions(weekKey, (docSnap) => {
+      if (!docSnap) { setWeeklyOptions([]); return; }
+      setWeeklyOptions(normalizeChoices(docSnap.choices));
     });
-
-    return () => {
-      unsubMenu();
-      unsubWeekly();
-    };
   }, [weekKey]);
 
   const handleAdd = async () => {
@@ -62,9 +51,8 @@ export default function MenuAdmin() {
   };
 
   const handleDelete = async (id: string, name: string) => {
-    const confirmDelete = confirm(`Are you sure you want to delete "${name}" from the menu?`);
+    const confirmDelete = confirm(`Delete "${name}" from the menu?`);
     if (!confirmDelete) return;
-
     try {
       await deleteDoc(doc(db, 'menu', id));
       toast.success('Item deleted!');
@@ -76,7 +64,7 @@ export default function MenuAdmin() {
 
   const handleEditSave = async (id: string) => {
     try {
-      await setDoc(doc(db, 'menu', id), { name: editText.trim() });
+      await setDoc(doc(db, 'menu', id), { name: editText.trim() }, { merge: true });
       toast.success('Item updated!');
       setEditingId(null);
     } catch (err) {
@@ -86,11 +74,8 @@ export default function MenuAdmin() {
   };
 
   const handleAddToWeekly = async (name: string) => {
-    if (!weekKey) return;
-    if (weeklyOptions.includes(name)) {
-      toast('Already in weekly options!');
-      return;
-    }
+    if (!weekKey) { toast.error('Set Current Week first.'); return; }
+    if (weeklyOptions.includes(name)) { toast('Already in weekly options!'); return; }
 
     const updated = [...weeklyOptions, name];
     await setDoc(doc(db, 'weeklyOptions', weekKey), {
@@ -143,15 +128,10 @@ export default function MenuAdmin() {
                       type="text"
                       value={editText}
                       onChange={(e) => setEditText(e.target.value)}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleEditSave(item.id);
-                      }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleEditSave(item.id); }}
                       className="flex-1 mr-2 px-2 py-1 rounded border border-gray-300 bg-white text-gray-900"
                     />
-                    <button
-                      onClick={() => handleEditSave(item.id)}
-                      className="text-green-600 hover:text-green-700 text-sm font-medium"
-                    >
+                    <button onClick={() => handleEditSave(item.id)} className="text-green-600 hover:text-green-700 text-sm font-medium">
                       ✅ Save
                     </button>
                   </>
@@ -163,26 +143,17 @@ export default function MenuAdmin() {
                     </span>
                     <div className="flex items-center gap-2">
                       {!isSelected && (
-                        <button
-                          onClick={() => handleAddToWeekly(item.name)}
-                          className="text-blue-600 hover:underline text-sm"
-                        >
+                        <button onClick={() => handleAddToWeekly(item.name)} className="text-blue-600 hover:underline text-sm">
                           ➕ Add
                         </button>
                       )}
                       <button
-                        onClick={() => {
-                          setEditingId(item.id);
-                          setEditText(item.name);
-                        }}
+                        onClick={() => { setEditingId(item.id); setEditText(item.name); }}
                         className="text-yellow-500 hover:underline text-sm"
                       >
                         ✏️ Edit
                       </button>
-                      <button
-                        onClick={() => handleDelete(item.id, item.name)}
-                        className="text-red-500 hover:underline text-sm"
-                      >
+                      <button onClick={() => handleDelete(item.id, item.name)} className="text-red-500 hover:underline text-sm">
                         ❌ Delete
                       </button>
                     </div>

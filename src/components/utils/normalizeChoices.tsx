@@ -1,4 +1,6 @@
-// Ensures Firestore 'choices' yields a clean, de-duped string[]
+import { normalizeKey } from './normalizeKey';
+
+// Ensures Firestore 'choices' yields a clean, de-duped string[] (keeps first-cased display)
 export function normalizeChoices(raw: any): string[] {
   let arr: any[] = [];
   if (Array.isArray(raw)) arr = raw;
@@ -9,12 +11,12 @@ export function normalizeChoices(raw: any): string[] {
 
   for (const v of arr) {
     if (typeof v !== 'string') continue;
-    const s = v.trim();
-    if (!s) continue;
-    const key = s.toLowerCase();
+    const display = v.trim().replace(/\s+/g, ' ');
+    if (!display) continue;
+    const key = normalizeKey(display);
     if (seen.has(key)) continue;
     seen.add(key);
-    out.push(s);
+    out.push(display); // preserve display casing
   }
   return out;
 }
