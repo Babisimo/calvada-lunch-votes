@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../firebaseConfig';
-import { collectionGroup, doc, onSnapshot, query, where } from 'firebase/firestore';
+import {
+  collection, collectionGroup, doc, onSnapshot, query, where
+} from 'firebase/firestore';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
 import { normalizeKey } from './utils/normalizeKey';
@@ -35,7 +37,7 @@ export default function Leaderboard() {
     return () => clearInterval(id);
   }, []);
 
-  // Direct weeklyOptions listener (resilient)
+  // weeklyOptions (resilient)
   useEffect(() => {
     if (!weekKey) { setWeeklyChoices([]); setWeeklyWinner(null); setWeeklyUpdatedAtMs(0); return; }
     return subscribeWeeklyOptions(weekKey, (data) => {
@@ -46,41 +48,54 @@ export default function Leaderboard() {
     });
   }, [weekKey]);
 
-  // Votes tally (collectionGroup → week == weekKey), normalized by key
+  // VOTES — use TOP-LEVEL /votes first; fallback to collectionGroup only if needed
   useEffect(() => {
     if (!weekKey) { setResults([]); setTotalVotes(0); return; }
-    const qCG = query(collectionGroup(db, 'votes'), where('week', '==', weekKey));
-    const unsub = onSnapshot(qCG, (snap) => {
-      const tally: Record<string, number> = {};
-      const voteKeys = new Set<string>();
 
-      snap.forEach(d => {
-        const raw = String(d.data().choice ?? '');
-        const k = normalizeKey(raw);
-        if (!k) return;
-        tally[k] = (tally[k] || 0) + 1;
-        voteKeys.add(k);
+    const qTop = query(collection(db, 'votes'), where('week', '==', weekKey));
+    let unsubscribe = onSnapshot(qTop, (snap) => {
+      buildTallyFromSnapshot(snap.docs.map(d => d.data()));
+    }, (err) => {
+      console.warn('[Leaderboard] top-level /votes failed, trying collectionGroup:', err?.message);
+      const qCG = query(collectionGroup(db, 'votes'), where('week', '==', weekKey));
+      unsubscribe = onSnapshot(qCG, (snapCG) => {
+        buildTallyFromSnapshot(snapCG.docs.map(d => d.data()));
       });
-
-      // Preferred display labels from current weekly choices
-      const labelByKey = new Map<string,string>();
-      for (const c of weeklyChoices) labelByKey.set(normalizeKey(c), c);
-
-      // Base order: weekly choices if present, else vote keys
-      const baseKeys = weeklyChoices.length
-        ? weeklyChoices.map(c => normalizeKey(c))
-        : Array.from(voteKeys);
-
-      const out = baseKeys.map(k => ({
-        choice: labelByKey.get(k) ?? k,
-        count: tally[k] || 0
-      })).sort((a,b) => b.count - a.count);
-
-      setResults(out);
-      setTotalVotes(snap.size);
     });
-    return () => unsub();
+
+    return () => unsubscribe && unsubscribe();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekKey, weeklyChoices]);
+
+  function buildTallyFromSnapshot(rows: any[]) {
+    const tally: Record<string, number> = {};
+    const voteKeys = new Set<string>();
+
+    rows.forEach((data: any) => {
+      const raw = String(data?.choice ?? '');
+      const k = normalizeKey(raw);
+      if (!k) return;
+      tally[k] = (tally[k] || 0) + 1;
+      voteKeys.add(k);
+    });
+
+    // Labels from current weekly choices
+    const labelByKey = new Map<string, string>();
+    for (const c of weeklyChoices) labelByKey.set(normalizeKey(c), c);
+
+    // Base order: weekly choices if present, else any seen vote keys
+    const baseKeys = weeklyChoices.length
+      ? weeklyChoices.map(c => normalizeKey(c))
+      : Array.from(voteKeys);
+
+    const out = baseKeys.map(k => ({
+      choice: labelByKey.get(k) ?? k,
+      count: tally[k] || 0,
+    })).sort((a, b) => b.count - a.count);
+
+    setResults(out);
+    setTotalVotes(rows.length);
+  }
 
   // Voting window end
   useEffect(() => {
@@ -97,7 +112,7 @@ export default function Leaderboard() {
   const showWinnerBanner =
     !!weeklyWinner?.name &&
     !!endTimeMs && now >= endTimeMs &&
-    totalVotes > 0 &&                     // ← never show if nobody voted
+    totalVotes > 0 &&
     (weeklyUpdatedAtMs === 0 || decidedAtMs >= weeklyUpdatedAtMs);
 
   useEffect(() => {
