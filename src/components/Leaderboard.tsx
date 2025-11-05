@@ -1,7 +1,9 @@
+// src/components/Leaderboard.tsx
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../firebaseConfig';
 import {
-  collection, collectionGroup, doc, onSnapshot, query, where
+  collection, collectionGroup, doc, onSnapshot, query, where,
+  getDocs, runTransaction, serverTimestamp
 } from 'firebase/firestore';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
@@ -14,6 +16,7 @@ const colors = ['bg-blue-500','bg-green-500','bg-purple-500','bg-yellow-500','bg
 function toMillis(v: any): number {
   if (!v) return 0;
   if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
+  if (typeof v === 'object' && 'seconds' in v) return v.seconds * 1000;
   if (typeof v === 'string') { const t = new Date(v).getTime(); return Number.isNaN(t) ? 0 : t; }
   if (typeof v === 'number') return v;
   return 0;
@@ -30,14 +33,16 @@ export default function Leaderboard() {
   const [totalVotes, setTotalVotes] = useState(0);
   const [endTimeMs, setEndTimeMs] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
+
   const hasCelebratedRef = useRef(false);
+  const decidingRef = useRef(false); // prevents duplicate client-side decides
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
-  // weeklyOptions (resilient)
+  // weeklyOptions (resilient direct listener)
   useEffect(() => {
     if (!weekKey) { setWeeklyChoices([]); setWeeklyWinner(null); setWeeklyUpdatedAtMs(0); return; }
     return subscribeWeeklyOptions(weekKey, (data) => {
@@ -48,18 +53,17 @@ export default function Leaderboard() {
     });
   }, [weekKey]);
 
-  // VOTES — use TOP-LEVEL /votes first; fallback to collectionGroup only if needed
+  // Votes — prefer TOP-LEVEL /votes; fallback to collectionGroup
   useEffect(() => {
     if (!weekKey) { setResults([]); setTotalVotes(0); return; }
 
     const qTop = query(collection(db, 'votes'), where('week', '==', weekKey));
     let unsubscribe = onSnapshot(qTop, (snap) => {
-      buildTallyFromSnapshot(snap.docs.map(d => d.data()));
-    }, (err) => {
-      console.warn('[Leaderboard] top-level /votes failed, trying collectionGroup:', err?.message);
+      buildTallyFromRows(snap.docs.map(d => d.data()));
+    }, () => {
       const qCG = query(collectionGroup(db, 'votes'), where('week', '==', weekKey));
       unsubscribe = onSnapshot(qCG, (snapCG) => {
-        buildTallyFromSnapshot(snapCG.docs.map(d => d.data()));
+        buildTallyFromRows(snapCG.docs.map(d => d.data()));
       });
     });
 
@@ -67,10 +71,9 @@ export default function Leaderboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekKey, weeklyChoices]);
 
-  function buildTallyFromSnapshot(rows: any[]) {
+  function buildTallyFromRows(rows: any[]) {
     const tally: Record<string, number> = {};
     const voteKeys = new Set<string>();
-
     rows.forEach((data: any) => {
       const raw = String(data?.choice ?? '');
       const k = normalizeKey(raw);
@@ -79,11 +82,9 @@ export default function Leaderboard() {
       voteKeys.add(k);
     });
 
-    // Labels from current weekly choices
     const labelByKey = new Map<string, string>();
     for (const c of weeklyChoices) labelByKey.set(normalizeKey(c), c);
 
-    // Base order: weekly choices if present, else any seen vote keys
     const baseKeys = weeklyChoices.length
       ? weeklyChoices.map(c => normalizeKey(c))
       : Array.from(voteKeys);
@@ -107,6 +108,77 @@ export default function Leaderboard() {
     });
     return () => unsub();
   }, []);
+
+  // Decide + persist winner ONCE after timer ends (only if there are votes)
+  useEffect(() => {
+    const timeOver = !!endTimeMs && now >= endTimeMs;
+    const noWinnerOrStale =
+      !weeklyWinner?.name || toMillis(weeklyWinner.decidedAt) < (weeklyUpdatedAtMs || 0);
+
+    if (!weekKey || !timeOver || totalVotes <= 0 || !noWinnerOrStale || decidingRef.current) return;
+
+    decidingRef.current = true;
+    (async () => {
+      try {
+        // Read votes for this week (top-level)
+        const qTop = query(collection(db, 'votes'), where('week', '==', weekKey));
+        const snap = await getDocs(qTop);
+
+        // Build tally against CURRENT weeklyChoices (normalized)
+        const validSet = new Set(weeklyChoices.map(c => normalizeKey(c)));
+        const tally: Record<string, number> = {};
+        snap.forEach(d => {
+          const k = normalizeKey(String(d.data().choice ?? ''));
+          if (!k || !validSet.has(k)) return; // ignore votes for options not in this week's choices
+          tally[k] = (tally[k] || 0) + 1;
+        });
+
+        const total = Object.values(tally).reduce((a, b) => a + b, 0);
+        if (total <= 0) { decidingRef.current = false; return; } // no valid votes for current options
+
+        // Determine winner label using weeklyChoices as source-of-truth for display names
+        const labelByKey = new Map<string, string>();
+        for (const c of weeklyChoices) labelByKey.set(normalizeKey(c), c);
+
+        const max = Math.max(...Object.values(tally));
+        const topKeys = Object.keys(tally).filter(k => tally[k] === max);
+        // deterministic tie-breaker: pick first by weeklyChoices order
+        const winnerKey = topKeys.sort((a, b) =>
+          weeklyChoices.findIndex(c => normalizeKey(c) === a) -
+          weeklyChoices.findIndex(c => normalizeKey(c) === b)
+        )[0];
+        const winnerName = labelByKey.get(winnerKey) ?? winnerKey;
+
+        // Transaction: only set winner if still missing or stale
+        const weeklyRef = doc(db, 'weeklyOptions', weekKey);
+        await runTransaction(db, async (tx) => {
+          const snapWeekly = await tx.get(weeklyRef);
+          if (!snapWeekly.exists()) return;
+
+          const data = snapWeekly.data() as any;
+          const existing = data?.winner;
+          const updatedAt = toMillis(data?.updatedAt);
+
+          // If already decided AFTER the latest options update, skip
+          if (existing?.name && toMillis(existing.decidedAt) >= updatedAt) return;
+
+          const winnerPayload = {
+            name: winnerName,
+            tally: Object.fromEntries(
+              Object.entries(tally).map(([k, v]) => [labelByKey.get(k) ?? k, v]) // store with pretty labels
+            ),
+            decidedAt: serverTimestamp(),
+            source: 'auto',
+          };
+          tx.set(weeklyRef, { winner: winnerPayload }, { merge: true });
+        });
+
+        // Let the listener pick up the freshly written winner
+      } finally {
+        decidingRef.current = false;
+      }
+    })();
+  }, [weekKey, endTimeMs, now, totalVotes, weeklyWinner, weeklyUpdatedAtMs, weeklyChoices]);
 
   const decidedAtMs = toMillis(weeklyWinner?.decidedAt);
   const showWinnerBanner =
