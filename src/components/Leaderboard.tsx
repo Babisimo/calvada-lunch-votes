@@ -11,7 +11,7 @@ import { normalizeKey } from './utils/normalizeKey';
 import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
 import confetti from 'canvas-confetti';
 
-const colors = ['bg-blue-500','bg-green-500','bg-purple-500','bg-yellow-500','bg-pink-500','bg-red-500'];
+const colors = ['bg-blue-500', 'bg-green-500', 'bg-purple-500', 'bg-yellow-500', 'bg-pink-500', 'bg-red-500'];
 
 function toMillis(v: any): number {
   if (!v) return 0;
@@ -36,6 +36,8 @@ export default function Leaderboard() {
 
   const hasCelebratedRef = useRef(false);
   const decidingRef = useRef(false); // prevents duplicate client-side decides
+
+
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -195,6 +197,8 @@ export default function Leaderboard() {
     }
   }, [showWinnerBanner]);
 
+
+
   const bannerText = useMemo(() => {
     if (!weeklyWinner?.name) return '';
     const msgs = [
@@ -204,7 +208,7 @@ export default function Leaderboard() {
       'The people have spoken: ___! 🗳️',
       'Lunch destiny: ___ 🚀',
     ];
-    return msgs[Math.floor(Math.random()*msgs.length)].replace('___', weeklyWinner.name);
+    return msgs[Math.floor(Math.random() * msgs.length)].replace('___', weeklyWinner.name);
   }, [weeklyWinner?.name]);
 
   return (
@@ -216,7 +220,6 @@ export default function Leaderboard() {
           <div className="text-lg font-semibold text-emerald-800">{bannerText}</div>
         </div>
       )}
-
       {weeklyChoices.length === 0 && results.length === 0 ? (
         <p className="text-gray-500 text-center">Weekly options not set.</p>
       ) : (

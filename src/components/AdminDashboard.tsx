@@ -23,6 +23,10 @@ import AdminWeekControl from './AdminWeekControl';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
 import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
+import { clearWinnerOnce } from './utils/maintenance/clearWinnerOnce';
+
+// add this inside the component, TEMPORARILY:
+;(window as any).clearWinnerOnce = clearWinnerOnce;
 
 export default function AdminDashboard() {
   const navigate = useNavigate();
@@ -37,6 +41,7 @@ export default function AdminDashboard() {
   const [weeklyChoices, setWeeklyChoices] = useState<string[]>([]);
   const [hasVotes, setHasVotes] = useState(false);
 
+  
   // ===== Admin list =====
   useEffect(() => {
     async function loadAdmins() {

@@ -1,9 +1,17 @@
+// src/components/VotingTimerAdmin.tsx
 import { useEffect, useState } from 'react';
 import { db } from '../../firebaseConfig';
-import { doc, setDoc, onSnapshot } from 'firebase/firestore';
+import {
+  doc, setDoc, onSnapshot, getDoc,
+  runTransaction, deleteField
+} from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { useWeekKey } from './utils/useWeekKey';
+
+const GRACE_MS = 60_000;
 
 export default function VotingTimerAdmin() {
+  const weekKey = useWeekKey();
   const configRef = doc(db, 'config', 'votingConfig');
 
   const [start, setStart] = useState('');
@@ -11,69 +19,66 @@ export default function VotingTimerAdmin() {
   const [status, setStatus] = useState('');
   const [countdown, setCountdown] = useState('');
 
-  // Helper
-  function isoWeekKeyFromLocal(startIsoLocal: string): string {
-    // startIsoLocal is like "2025-10-27T07:00" (local)
-    const d = new Date(startIsoLocal); // local time
-    // ISO week algorithm
-    const target = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
-    // Set to nearest Thursday: current date + 4 - current day number (Mon=1, Sun=7)
-    const dayNr = (target.getUTCDay() + 6) % 7; // Mon=0..Sun=6
-    target.setUTCDate(target.getUTCDate() - dayNr + 3);
-    const firstThursday = new Date(Date.UTC(target.getUTCFullYear(), 0, 4));
-    const week = 1 + Math.round(
-      ((target.getTime() - firstThursday.getTime()) / 86400000 - 3 + ((firstThursday.getUTCDay() + 6) % 7)) / 7
-    );
-    const year = target.getUTCFullYear();
-    const ww = String(week).padStart(2, '0');
-    return `${year}-W${ww}`;
-  }
-
   useEffect(() => {
     const unsub = onSnapshot(configRef, (snap) => {
       const data = snap.data();
-      if (data?.start && data?.end) {
-        setStart(data.start);
-        setEnd(data.end);
-      }
+      if (data?.start) setStart(data.start);
+      if (data?.end) setEnd(data.end);
     });
     return unsub;
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => {
+    const id = setInterval(() => {
       if (!start || !end) return;
-
-      const now = new Date();
-      const startDate = new Date(start);
-      const endDate = new Date(end);
-
-      if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+      const now = Date.now();
+      const s = new Date(start).getTime();
+      const e = new Date(end).getTime();
+      if (Number.isNaN(s) || Number.isNaN(e)) {
         setStatus('❌ Invalid date format');
-        setCountdown('');
-        return;
+        setCountdown(''); return;
       }
-
-      if (now < startDate) {
-        setStatus('⏳ Voting has not started yet');
-        setCountdown(timeDiff(now, startDate));
-      } else if (now > endDate) {
-        setStatus('🛑 Voting has ended');
-        setCountdown('');
-      } else {
-        setStatus('✅ Voting is live!');
-      }
+      if (now < s) { setStatus('⏳ Voting has not started yet'); setCountdown(fmt(e - now)); }
+      else if (now > e) { setStatus('🛑 Voting has ended'); setCountdown(''); }
+      else { setStatus('✅ Voting is live!'); setCountdown(fmt(e - now)); }
     }, 1000);
-
-    return () => clearInterval(interval);
+    return () => clearInterval(id);
   }, [start, end]);
 
-  function timeDiff(now: Date, target: Date) {
-    const diff = Math.floor((target.getTime() - now.getTime()) / 1000);
-    const h = Math.floor(diff / 3600).toString().padStart(2, '0');
-    const m = Math.floor((diff % 3600) / 60).toString().padStart(2, '0');
-    const s = (diff % 60).toString().padStart(2, '0');
+  function fmt(ms: number) {
+    const t = Math.max(0, Math.floor(ms/1000));
+    const h = String(Math.floor(t/3600)).padStart(2,'0');
+    const m = String(Math.floor((t%3600)/60)).padStart(2,'0');
+    const s = String(t%60).padStart(2,'0');
     return `${h}:${m}:${s}`;
+  }
+
+  async function maybeClearWinnerOnExtend(prevEndISO: string | null | undefined, newEndISO: string) {
+    if (!weekKey || !newEndISO) return;
+
+    const prevEnd = prevEndISO ? new Date(prevEndISO).getTime() : null;
+    const newEnd = new Date(newEndISO).getTime();
+    if (!newEnd || Number.isNaN(newEnd)) return;
+
+    // Only act if the end was extended
+    const extended = prevEnd !== null && !Number.isNaN(prevEnd) && newEnd > prevEnd;
+    if (!extended) return;
+
+    const ref = doc(db, 'weeklyOptions', weekKey);
+    await runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists()) return;
+      const data = snap.data() as any;
+      const decidedAt = data?.winner?.decidedAt;
+      const decidedMs =
+        decidedAt?.toMillis?.() ??
+        (typeof decidedAt === 'object' && decidedAt?.seconds ? decidedAt.seconds*1000 : 0);
+
+      // Clear if the winner was decided before (or at) the original end (+grace)
+      if (data?.winner && decidedMs <= (prevEnd! + GRACE_MS)) {
+        tx.set(ref, { winner: deleteField() }, { merge: true });
+      }
+    });
   }
 
   const handleSave = async () => {
@@ -81,15 +86,17 @@ export default function VotingTimerAdmin() {
       toast.error('Please select both start and end times.');
       return;
     }
-
     try {
-      const weekKey = isoWeekKeyFromLocal(start);
+      // Read previous end
+      const prevSnap = await getDoc(configRef);
+      const prevEnd = prevSnap.exists() ? prevSnap.data()?.end : null;
 
-      await setDoc(configRef, { start, end }, { merge: true });
-      // 🔑 single source of truth for the whole app:
-      await setDoc(doc(db, 'config', 'currentWeek'), { value: weekKey }, { merge: true });
+      // Save new timer
+      await setDoc(configRef, { start, end });
+      toast.success('Voting timer updated!');
 
-      toast.success(`Voting timer updated! Week set to ${weekKey}`);
+      // If you extended the end for this week, clear stale winner (auto)
+      await maybeClearWinnerOnExtend(prevEnd, end);
     } catch (err) {
       console.error(err);
       toast.error('Failed to update timer.');
@@ -131,9 +138,7 @@ export default function VotingTimerAdmin() {
 
       <div className="mt-6 text-center space-y-1">
         <p className="text-sm text-gray-500">{status}</p>
-        {countdown && (
-          <p className="text-2xl font-mono text-indigo-600">{countdown}</p>
-        )}
+        {countdown && <p className="text-2xl font-mono text-indigo-600">{countdown}</p>}
       </div>
     </div>
   );
