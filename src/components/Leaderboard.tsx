@@ -22,6 +22,17 @@ function toMillis(v: any): number {
   return 0;
 }
 
+function formatCountdown(ms: number): string {
+  if (ms <= 0) return 'Voting closed';
+  const totalSeconds = Math.floor(ms / 1000);
+  const d = Math.floor(totalSeconds / 86400);
+  const h = Math.floor((totalSeconds % 86400) / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  if (d > 0) return `${d}d ${h}h ${m}m ${s}s`;
+  return `${h}h ${m}m ${s}s`;
+}
+
 export default function Leaderboard() {
   const weekKey = useWeekKey();
 
@@ -31,13 +42,12 @@ export default function Leaderboard() {
 
   const [results, setResults] = useState<{ choice: string; count: number }[]>([]);
   const [totalVotes, setTotalVotes] = useState(0);
+  const [voteStartMs, setVoteStartMs] = useState<number | null>(null);
   const [endTimeMs, setEndTimeMs] = useState<number | null>(null);
   const [now, setNow] = useState(Date.now());
 
   const hasCelebratedRef = useRef(false);
-  const decidingRef = useRef(false); // prevents duplicate client-side decides
-
-
+  const decidingRef = useRef(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -100,18 +110,20 @@ export default function Leaderboard() {
     setTotalVotes(rows.length);
   }
 
-  // Voting window end
+  // Voting window (start + end)
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
-      if (!snap.exists()) { setEndTimeMs(null); return; }
+      if (!snap.exists()) { setVoteStartMs(null); setEndTimeMs(null); return; }
       const data = snap.data();
+      const startMs = toMillis(data?.startTime ?? data?.start);
       const endMs = toMillis(data?.endTime ?? data?.end);
+      setVoteStartMs(startMs || null);
       setEndTimeMs(endMs || null);
     });
     return () => unsub();
   }, []);
 
-  // Decide + persist winner ONCE after timer ends (only if there are votes)
+  // Decide + persist winner ONCE after timer ends
   useEffect(() => {
     const timeOver = !!endTimeMs && now >= endTimeMs;
     const noWinnerOrStale =
@@ -122,36 +134,31 @@ export default function Leaderboard() {
     decidingRef.current = true;
     (async () => {
       try {
-        // Read votes for this week (top-level)
         const qTop = query(collection(db, 'votes'), where('week', '==', weekKey));
         const snap = await getDocs(qTop);
 
-        // Build tally against CURRENT weeklyChoices (normalized)
         const validSet = new Set(weeklyChoices.map(c => normalizeKey(c)));
         const tally: Record<string, number> = {};
         snap.forEach(d => {
           const k = normalizeKey(String(d.data().choice ?? ''));
-          if (!k || !validSet.has(k)) return; // ignore votes for options not in this week's choices
+          if (!k || !validSet.has(k)) return;
           tally[k] = (tally[k] || 0) + 1;
         });
 
         const total = Object.values(tally).reduce((a, b) => a + b, 0);
-        if (total <= 0) { decidingRef.current = false; return; } // no valid votes for current options
+        if (total <= 0) { decidingRef.current = false; return; }
 
-        // Determine winner label using weeklyChoices as source-of-truth for display names
         const labelByKey = new Map<string, string>();
         for (const c of weeklyChoices) labelByKey.set(normalizeKey(c), c);
 
         const max = Math.max(...Object.values(tally));
         const topKeys = Object.keys(tally).filter(k => tally[k] === max);
-        // deterministic tie-breaker: pick first by weeklyChoices order
         const winnerKey = topKeys.sort((a, b) =>
           weeklyChoices.findIndex(c => normalizeKey(c) === a) -
           weeklyChoices.findIndex(c => normalizeKey(c) === b)
         )[0];
         const winnerName = labelByKey.get(winnerKey) ?? winnerKey;
 
-        // Transaction: only set winner if still missing or stale
         const weeklyRef = doc(db, 'weeklyOptions', weekKey);
         await runTransaction(db, async (tx) => {
           const snapWeekly = await tx.get(weeklyRef);
@@ -161,21 +168,18 @@ export default function Leaderboard() {
           const existing = data?.winner;
           const updatedAt = toMillis(data?.updatedAt);
 
-          // If already decided AFTER the latest options update, skip
           if (existing?.name && toMillis(existing.decidedAt) >= updatedAt) return;
 
           const winnerPayload = {
             name: winnerName,
             tally: Object.fromEntries(
-              Object.entries(tally).map(([k, v]) => [labelByKey.get(k) ?? k, v]) // store with pretty labels
+              Object.entries(tally).map(([k, v]) => [labelByKey.get(k) ?? k, v])
             ),
             decidedAt: serverTimestamp(),
             source: 'auto',
           };
           tx.set(weeklyRef, { winner: winnerPayload }, { merge: true });
         });
-
-        // Let the listener pick up the freshly written winner
       } finally {
         decidingRef.current = false;
       }
@@ -197,8 +201,6 @@ export default function Leaderboard() {
     }
   }, [showWinnerBanner]);
 
-
-
   const bannerText = useMemo(() => {
     if (!weeklyWinner?.name) return '';
     const msgs = [
@@ -211,15 +213,41 @@ export default function Leaderboard() {
     return msgs[Math.floor(Math.random() * msgs.length)].replace('___', weeklyWinner.name);
   }, [weeklyWinner?.name]);
 
+  // Derived timer state
+  const votingOpen = !!voteStartMs && !!endTimeMs && now >= voteStartMs && now < endTimeMs;
+  const votingNotStarted = !!voteStartMs && now < voteStartMs;
+  const msUntilStart = voteStartMs ? voteStartMs - now : 0;
+  const msUntilEnd = endTimeMs ? endTimeMs - now : 0;
+
   return (
     <div className="mb-10">
       <h2 className="text-2xl font-semibold mb-4 text-center">📊 Leaderboard</h2>
 
+      {/* Voting Timer */}
+      {!showWinnerBanner && (
+        <div className="mb-4 text-center text-sm text-gray-600">
+          {votingOpen && (
+            <p>⏳ Voting closes in: <span className="font-semibold text-gray-800">{formatCountdown(msUntilEnd)}</span></p>
+          )}
+          {votingNotStarted && (
+            <p>🕒 Voting opens in: <span className="font-semibold text-gray-800">{formatCountdown(msUntilStart)}</span></p>
+          )}
+          {!votingOpen && !votingNotStarted && endTimeMs && now >= endTimeMs && (
+            <p className="text-gray-400">🔒 Voting is closed.</p>
+          )}
+          {!voteStartMs && !endTimeMs && (
+            <p className="text-gray-400">🕒 Voting window not scheduled yet.</p>
+          )}
+        </div>
+      )}
+
+      {/* Winner Banner */}
       {showWinnerBanner && (
         <div className="mb-6 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-center shadow-sm">
           <div className="text-lg font-semibold text-emerald-800">{bannerText}</div>
         </div>
       )}
+
       {weeklyChoices.length === 0 && results.length === 0 ? (
         <p className="text-gray-500 text-center">Weekly options not set.</p>
       ) : (
