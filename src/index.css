@@ -1,3 +1,303 @@
 @import "tailwindcss";
-/* @import "tailwindcss/preflight";
-@import "tailwindcss/utilities"; */
+
+/* ============================================================================
+   CALVADA LUNCH VOTE — DESIGN TOKENS
+   ----------------------------------------------------------------------------
+   Single source of truth for the whole app. Tailwind v4 reads this block and
+   generates the utilities (bg-brand-600, text-ink-muted, rounded-card, ...).
+   There is no tailwind.config.ts — v4 is CSS-first.
+
+   >>> TO APPLY THE REAL CALVADA PALETTE: edit ONLY the BRAND + ACCENT blocks
+   >>> below. Every component consumes tokens, so nothing else needs to change.
+
+   Contrast notes (WCAG AA, measured):
+     white on brand-600    4.9:1  OK — this is why buttons use 600, not 500
+     white on brand-500    4.2:1  FAILS body text. Fills / large type only.
+     white on danger-600   4.8:1  OK
+     ink-muted on surface  6.1:1  OK
+     ink-subtle on surface 5.0:1  OK
+   ========================================================================== */
+
+@theme {
+  /* ---- BRAND — Calvada green. Primary action, bars, affirmative states. ----
+     brand-500 (#238d4f) is the official brand color. It measures 4.2:1 against
+     white, just under AA, so anything with white TEXT on it uses brand-600. */
+  --color-brand-50: #edfaf2;
+  --color-brand-100: #d2f2e0;
+  --color-brand-200: #a8e6c4;
+  --color-brand-300: #71d3a2;
+  --color-brand-400: #3fb87e;
+  --color-brand-500: #238d4f; /* ← official Calvada green */
+  --color-brand-600: #1f8148;
+  --color-brand-700: #1a6d3d;
+  --color-brand-800: #155832;
+  --color-brand-900: #12482a;
+  /* Explicit interaction states. Stepping down the ramp (600 -> 700) would
+     invert under dark mode, where the ramp runs light-to-dark the other way. */
+  --color-brand-hover: #1a6d3d;
+  --color-brand-active: #155832;
+
+  /* ---- ACCENT — unassigned. No secondary brand color specified yet, so
+     nothing in the app uses these. Fill them in if/when one is chosen. ---- */
+  --color-accent-50: #fffbeb;
+  --color-accent-100: #fef3c7;
+  --color-accent-200: #fde68a;
+  --color-accent-300: #fcd34d;
+  --color-accent-400: #fbbf24;
+  --color-accent-500: #f59e0b;
+  --color-accent-600: #d97706;
+
+  /* ---- SEMANTIC — meaning, not decoration ----------------------------------
+     The brand is green, so "success green" would be a second, competing green.
+     Affirmative UI states (winner, selected, on-ballot) therefore use BRAND
+     tokens. success-* is reserved for transient toast icons only. */
+  --color-success-50: #ecfdf5;
+  --color-success-200: #a7f3d0;
+  --color-success-500: #10b981;
+  --color-success-600: #059669;
+  --color-success-700: #047857;
+  --color-success-800: #065f46;
+  --color-success-900: #064e3b;
+
+  --color-danger-50: #fef2f2;
+  --color-danger-200: #fecaca;
+  --color-danger-500: #ef4444;
+  --color-danger-600: #dc2626;
+  --color-danger-700: #b91c1c;
+  --color-danger-900: #7f1d1d;
+  --color-danger-hover: #b91c1c;
+  --color-danger-active: #7f1d1d;
+
+  --color-warning-50: #fffbeb;
+  --color-warning-600: #d97706;
+  --color-warning-800: #92400e;
+
+  /* ---- SURFACE + INK — the quiet 90% of the UI ---------------------------- */
+  --color-canvas: #f6f7fa;
+  --color-surface: #ffffff;
+  --color-surface-muted: #f1f3f7;
+  --color-border: #e3e7ef;
+  --color-border-strong: #c9d0e0;
+  --color-ink: #16181d;
+  --color-ink-muted: #5b6272;
+  --color-ink-subtle: #667085;
+  --color-ink-inverse: #ffffff;
+  /* Text/icon color that sits ON a saturated brand fill. Flips in dark mode,
+     where the brand greens lighten and white would no longer be legible. */
+  --color-on-brand: #ffffff;
+
+  /* ---- TYPE ---------------------------------------------------- SWAP ME -- */
+  --font-display: "Bricolage Grotesque", "Inter", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* ---- RADIUS + ELEVATION ------------------------------------------------- */
+  --radius-field: 0.5rem;
+  --radius-card: 0.875rem;
+  --radius-panel: 1.125rem;
+
+  --shadow-card: 0 1px 2px rgb(22 24 29 / 0.04), 0 4px 16px -8px rgb(22 24 29 / 0.12);
+  --shadow-lift: 0 2px 4px rgb(22 24 29 / 0.06), 0 12px 28px -12px rgb(22 24 29 / 0.22);
+}
+
+/* ============================================================================
+   DARK MODE
+   Only the surface/ink ramp and the brand ramp move. Because every component
+   reads tokens rather than raw Tailwind palette classes, this block is the
+   entire dark theme — no component changes, no `dark:` variants to maintain.
+
+   The brand greens LIGHTEN here: #238d4f on a near-black canvas is too dim to
+   read, and white text on it fails. Lightened fills take dark text instead,
+   via --color-on-brand.
+   ========================================================================== */
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-canvas: #0e1014;
+    --color-surface: #161a20;
+    --color-surface-muted: #1e232b;
+    --color-border: #2a313b;
+    --color-border-strong: #3b4350;
+    --color-ink: #e7eaee;
+    --color-ink-muted: #a9b2bf;
+    --color-ink-subtle: #8d97a5;
+
+    --color-brand-50: #10241a;
+    --color-brand-100: #14331f;
+    --color-brand-200: #1b4d2e;
+    --color-brand-300: #277143;
+    --color-brand-400: #2f9a58;
+    --color-brand-500: #3cc074;
+    --color-brand-600: #4bd083;
+    --color-brand-700: #74dc9f;
+    --color-brand-800: #a5e9c1;
+    --color-brand-900: #d3f5e2;
+    --color-on-brand: #0e1014;
+
+    /* Interactive fills brighten on dark instead of darkening. */
+    --color-brand-hover: #63dc95;
+    --color-brand-active: #7ce6a8;
+    --color-danger-hover: #ef5f63;
+    --color-danger-active: #f5878a;
+
+    /* danger-600 is NOT lightened: white-on-#dc2626 is 4.8:1 regardless of the
+       page behind it, and lightening the fill would break that. Only the
+       danger SURFACE and its text move. */
+    --color-danger-50: #2a1416;
+    --color-danger-200: #4d1f24;
+    --color-danger-700: #ff9ea1;
+    --color-danger-900: #ffc9cb;
+
+    --color-warning-50: #2a2110;
+    --color-warning-600: #e0a030;
+    --color-warning-800: #f5d19a;
+
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px -8px rgb(0 0 0 / 0.6);
+    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.5), 0 12px 28px -12px rgb(0 0 0 / 0.7);
+  }
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    margin: 0;
+    background-color: var(--color-canvas);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  h1,
+  h2,
+  h3 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+
+  /* Keyboard users get a visible, consistent ring everywhere. */
+  :focus-visible {
+    outline: 2px solid var(--color-brand-600);
+    outline-offset: 2px;
+    border-radius: var(--radius-field);
+  }
+
+  /* Mouse users don't. */
+  :focus:not(:focus-visible) {
+    outline: none;
+  }
+
+  /* Countdowns and percentages must not reflow every tick. */
+  time,
+  [data-numeric] {
+    font-variant-numeric: tabular-nums;
+  }
+
+  ::selection {
+    background-color: var(--color-brand-100);
+    color: var(--color-ink);
+  }
+}
+
+/* ============================================================================
+   MOTION
+   Every animation below is switched off wholesale by the reduced-motion block
+   at the bottom of this file, so new ones are covered automatically.
+   ========================================================================== */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes pop {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes banner-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Slow, tiny drift. Anything bigger turns celebration into distraction. */
+@keyframes bob {
+  0%,
+  100% {
+    transform: translateY(0) rotate(-4deg);
+  }
+  50% {
+    transform: translateY(-3px) rotate(4deg);
+  }
+}
+
+@keyframes urgent-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@layer utilities {
+  /* Entrance. Pair with an inline animation-delay to stagger a list. */
+  .animate-rise {
+    animation: rise 0.45s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .animate-pop {
+    animation: pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+  }
+
+  .animate-banner-in {
+    animation: banner-in 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
+  }
+
+  .animate-bob {
+    animation: bob 2.4s ease-in-out infinite;
+  }
+
+  /* Last hour before the ballot closes. */
+  .animate-urgent {
+    animation: urgent-pulse 1.6s ease-in-out infinite;
+  }
+
+  /* Respect the OS setting — confetti and bar fills included. */
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}

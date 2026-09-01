@@ -1,0 +1,17 @@
+{
+  "name": "lunch-voting-functions",
+  "description": "Scheduled winner decision + announcement for the Calvada lunch vote",
+  "private": true,
+  "main": "index.js",
+  "engines": {
+    "node": "20"
+  },
+  "scripts": {
+    "serve": "firebase emulators:start --only functions",
+    "logs": "firebase functions:log"
+  },
+  "dependencies": {
+    "firebase-admin": "^12.6.0",
+    "firebase-functions": "^6.1.0"
+  }
+}

@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { db } from '../../firebaseConfig';
 import { doc, onSnapshot, serverTimestamp, setDoc } from 'firebase/firestore';
 import toast from 'react-hot-toast';
+import { CalendarDays, Plus, Save } from 'lucide-react';
+import { btn, btnSize, cn, field, label, panel, sectionTitle } from './ui/styles';
 
 function nextIsoWeek(weekKey: string): string | null {
   // weekKey: "YYYY-Www"
@@ -49,47 +51,65 @@ export default function AdminWeekControl() {
 
   const saveWeek = async (wk: string) => {
     if (!/^20\d{2}-W\d{2}$/.test(wk)) {
-      toast.error('Use format YYYY-Www (e.g., 2025-W43)');
+      toast.error('Use the format YYYY-Www, e.g. 2025-W43');
       return;
     }
     await setDoc(doc(db, 'config', 'currentWeek'), { value: wk }, { merge: true });
     // Scaffold weeklyOptions/{wk}
     await setDoc(doc(db, 'weeklyOptions', wk), { week: wk, updatedAt: serverTimestamp() }, { merge: true });
-    toast.success(`Current Week set to ${wk}`);
+    toast.success(`Current week is now ${wk}`);
   };
 
   const handleSave = async () => {
     const wk = input.trim();
-    try { await saveWeek(wk); } catch (e) { console.error(e); toast.error('Failed to set week'); }
+    try { await saveWeek(wk); } catch (e) { console.error(e); toast.error("Couldn't set the week"); }
   };
 
   const handleNewWeek = async () => {
     const next = nextIsoWeek(currentWeek || input);
-    if (!next) { toast.error('Invalid current week. Set it first.'); return; }
-    try { await saveWeek(next); } catch (e) { console.error(e); toast.error('Failed to create new week'); }
+    if (!next) { toast.error('Set a valid current week first'); return; }
+    try { await saveWeek(next); } catch (e) { console.error(e); toast.error("Couldn't start a new week"); }
   };
 
   return (
-    <section className="bg-white p-6 rounded-xl shadow border border-gray-200">
-      <h3 className="text-lg font-semibold mb-4 text-center">🗓️ Current Week</h3>
-      <div className="flex flex-col sm:flex-row gap-3 items-center justify-center">
-        <input
-          type="text"
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          placeholder="e.g. 2025-W43"
-          className="px-4 py-2 w-full sm:w-60 border border-gray-300 bg-white text-gray-900 rounded"
-        />
-        <button onClick={handleSave} className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded transition">
-          💾 Save Week
+    <section className={cn(panel, 'flex flex-col p-5 sm:p-6')}>
+      <div className="mb-4 flex items-center gap-2.5">
+        <span
+          aria-hidden="true"
+          className="flex h-8 w-8 items-center justify-center rounded-field bg-brand-50 text-brand-700"
+        >
+          <CalendarDays size={16} strokeWidth={2.25} />
+        </span>
+        <h2 className={sectionTitle}>Current week</h2>
+      </div>
+
+      <label htmlFor="week-key" className={label}>
+        Week key
+      </label>
+      <input
+        id="week-key"
+        type="text"
+        value={input}
+        onChange={(e) => setInput(e.target.value)}
+        onKeyDown={(e) => { if (e.key === 'Enter') handleSave(); }}
+        placeholder="2025-W43"
+        data-numeric
+        className={cn(field, 'mt-1.5')}
+      />
+      <p className="mt-1.5 text-sm text-ink-subtle">
+        Live: <b className="font-semibold text-ink" data-numeric>{currentWeek || 'not set'}</b>
+      </p>
+
+      <div className="mt-auto flex flex-col gap-2 pt-4 sm:flex-row">
+        <button onClick={handleSave} className={cn(btn.primary, btnSize.md, 'flex-1')}>
+          <Save size={16} strokeWidth={2.25} aria-hidden="true" />
+          Save week
         </button>
-        <button onClick={handleNewWeek} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded transition">
-          ➕ New Week
+        <button onClick={handleNewWeek} className={cn(btn.secondary, btnSize.md, 'flex-1')}>
+          <Plus size={16} strokeWidth={2.25} aria-hidden="true" />
+          Start next week
         </button>
       </div>
-      <p className="text-xs text-gray-500 mt-2 text-center">
-        Current: <b>{currentWeek || '— not set —'}</b>
-      </p>
     </section>
   );
 }

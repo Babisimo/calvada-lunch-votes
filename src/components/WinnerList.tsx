@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { db } from '../../firebaseConfig';
 import { collection, getDocs, orderBy, query, where } from 'firebase/firestore';
+import { Trophy } from 'lucide-react';
+import { cn, panel, sectionTitle } from './ui/styles';
 
 type WinnerListItem = {
   week: string;
@@ -39,26 +41,39 @@ export default function WinnersList() {
   }, []);
 
   return (
-    <div className="max-w-xl mx-auto bg-white rounded-xl border border-gray-200 shadow p-6">
-      <h3 className="text-xl font-semibold mb-4">🏆 Past Winners</h3>
+    <section className={cn(panel, 'p-5 sm:p-6')}>
+      <div className="mb-4 flex items-center gap-2.5">
+        <span
+          aria-hidden="true"
+          className="flex h-8 w-8 items-center justify-center rounded-field bg-brand-50 text-brand-700"
+        >
+          <Trophy size={16} strokeWidth={2.25} />
+        </span>
+        <h2 className={sectionTitle}>Past winners</h2>
+      </div>
+
       {items.length === 0 ? (
-        <p className="text-gray-500">No winners recorded yet.</p>
+        <p className="rounded-card border border-dashed border-border-strong px-4 py-6 text-center text-sm text-ink-subtle">
+          No winners recorded yet.
+        </p>
       ) : (
-        <ul className="space-y-3">
+        <ul className="divide-y divide-border">
           {items.map((it) => {
             const date = it.decidedAt
-              ? new Date(it.decidedAt.seconds * 1000).toLocaleString()
+              ? new Date(it.decidedAt.seconds * 1000).toLocaleDateString()
               : '—';
             return (
-              <li key={it.week} className="flex justify-between items-center">
-                <span className="font-medium">{it.week}</span>
-                <span className="text-gray-800">{it.winner}</span>
-                <span className="text-sm text-gray-500">{date}</span>
+              <li key={it.week} className="flex items-baseline justify-between gap-3 py-2.5">
+                <span className="flex min-w-0 items-baseline gap-3">
+                  <span data-numeric className="shrink-0 text-sm text-ink-subtle">{it.week}</span>
+                  <span className="truncate font-semibold">{it.winner}</span>
+                </span>
+                <span data-numeric className="shrink-0 text-sm text-ink-subtle">{date}</span>
               </li>
             );
           })}
         </ul>
       )}
-    </div>
+    </section>
   );
 }

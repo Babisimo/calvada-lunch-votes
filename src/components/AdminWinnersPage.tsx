@@ -4,6 +4,8 @@ import { db } from '../../firebaseConfig';
 import {
   collection, getDocs, orderBy, query,
 } from 'firebase/firestore';
+import { ArrowLeft, Download, RefreshCw } from 'lucide-react';
+import { btn, btnSize, cn, field, panel } from './ui/styles';
 
 type WinnerRow = {
   week: string;
@@ -129,70 +131,87 @@ export default function AdminWinnersPage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 p-8">
-      <div className="max-w-4xl mx-auto bg-white rounded-xl border border-gray-200 shadow">
-        <div className="flex items-center justify-between p-6 border-b">
-          <h1 className="text-2xl font-bold">🏆 Previous Winners</h1>
-          <div className="flex items-center gap-3">
+    <div className="min-h-screen bg-canvas text-ink">
+      <div className="mx-auto max-w-5xl px-5 py-8 sm:px-6">
+        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h1 className="font-display text-2xl font-extrabold tracking-tight">Past winners</h1>
+            <p className="mt-0.5 text-sm text-ink-subtle">
+              <span data-numeric>{filtered.length}</span>{' '}
+              {filtered.length === 1 ? 'week' : 'weeks'} on record
+            </p>
+          </div>
+          <a href="/admin" className={cn(btn.secondary, btnSize.sm)}>
+            <ArrowLeft size={15} strokeWidth={2.25} aria-hidden="true" />
+            Back to admin
+          </a>
+        </div>
+
+        <div className={cn(panel, 'overflow-hidden')}>
+          <div className="flex flex-wrap items-center gap-2.5 border-b border-border px-5 py-3.5">
             <input
               value={filter}
               onChange={(e) => setFilter(e.target.value)}
-              placeholder="Filter by week or winner…"
-              className="border rounded px-3 py-2 text-sm"
+              placeholder="Filter by week or winner"
+              aria-label="Filter winners"
+              className={cn(field, 'sm:max-w-xs')}
             />
-            <button
-              onClick={handleExportCSV}
-              className="px-3 py-2 text-sm bg-emerald-600 hover:bg-emerald-700 text-white rounded"
-            >
-              ⬇ Export CSV
-            </button>
-            <button
-              onClick={load}
-              className="px-3 py-2 text-sm bg-gray-600 hover:bg-gray-700 text-white rounded"
-            >
-              ↻ Refresh
-            </button>
-            <a href="/admin" className="text-blue-600 hover:underline text-sm">
-              ← Back to Admin
-            </a>
+            <div className="ml-auto flex items-center gap-2">
+              <button onClick={load} className={cn(btn.secondary, btnSize.sm)}>
+                <RefreshCw size={15} strokeWidth={2.25} aria-hidden="true" />
+                Refresh
+              </button>
+              <button onClick={handleExportCSV} className={cn(btn.primary, btnSize.sm)}>
+                <Download size={15} strokeWidth={2.25} aria-hidden="true" />
+                Export CSV
+              </button>
+            </div>
           </div>
-        </div>
 
-        {loading ? (
-          <p className="p-6 text-center text-gray-500">Loading…</p>
-        ) : filtered.length === 0 ? (
-          <p className="p-6 text-center text-gray-500">No winners recorded yet.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-sm">
-              <thead className="bg-gray-100 text-gray-700">
-                <tr>
-                  <th className="text-left px-6 py-3">Week</th>
-                  <th className="text-left px-6 py-3">Winner</th>
-                  <th className="text-left px-6 py-3">Decided At</th>
-                  <th className="text-left px-6 py-3">Total Votes</th>
-                  <th className="text-left px-6 py-3">Choices</th>
+          {loading ? (
+            <div className="space-y-2 p-5" aria-busy="true">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-10 animate-pulse rounded-field bg-surface-muted" />
+              ))}
+            </div>
+          ) : filtered.length === 0 ? (
+            <p className="px-4 py-12 text-center text-sm text-ink-subtle">
+              {rows.length === 0
+                ? 'No winners recorded yet. The first one lands when a voting window closes.'
+                : 'Nothing matches that filter.'}
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-sm">
+                <thead className="border-b border-border bg-surface-muted text-left">
+                  <tr className="text-xs font-semibold uppercase tracking-wide text-ink-subtle">
+                    <th scope="col" className="px-5 py-3">Week</th>
+                    <th scope="col" className="px-5 py-3">Winner</th>
+                    <th scope="col" className="px-5 py-3">Decided</th>
+                    <th scope="col" className="px-5 py-3">Votes</th>
+                    <th scope="col" className="px-5 py-3">Ballot</th>
                   </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-200">
-                {filtered.map((r) => {
-                  const decided = toMillis(r.decidedAt)
-                    ? new Date(toMillis(r.decidedAt)).toLocaleString()
-                    : '—';
-                  return (
-                    <tr key={`${r.source}-${r.week}`} className="hover:bg-gray-50">
-                      <td className="px-6 py-3 font-medium">{r.week}</td>
-                      <td className="px-6 py-3">{r.winner || '—'}</td>
-                      <td className="px-6 py-3">{decided}</td>
-                      <td className="px-6 py-3">{r.votes ?? '—'}</td>
-                      <td className="px-6 py-3">{(r.choices || []).join(', ')}</td>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filtered.map((r) => {
+                    const decided = toMillis(r.decidedAt)
+                      ? new Date(toMillis(r.decidedAt)).toLocaleString()
+                      : '—';
+                    return (
+                      <tr key={`${r.source}-${r.week}`} className="transition-colors hover:bg-surface-muted">
+                        <td className="px-5 py-3 font-medium" data-numeric>{r.week}</td>
+                        <td className="px-5 py-3 font-semibold text-brand-800">{r.winner || '—'}</td>
+                        <td className="px-5 py-3 text-ink-muted" data-numeric>{decided}</td>
+                        <td className="px-5 py-3 text-ink-muted" data-numeric>{r.votes ?? '—'}</td>
+                        <td className="px-5 py-3 text-ink-subtle">{(r.choices || []).join(', ')}</td>
                       </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

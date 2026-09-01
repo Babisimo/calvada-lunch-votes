@@ -2,10 +2,12 @@ import { useEffect, useState } from 'react';
 import { useAuthState } from 'react-firebase-hooks/auth';
 import { auth, loginWithGoogle, logout, db } from '../firebaseConfig';
 import { doc, getDoc } from 'firebase/firestore';
+import { LogOut, Shield, UtensilsCrossed } from 'lucide-react';
 
 import Login from './components/Login';
 import Voting from './components/Voting';
 import Leaderboard from './components/Leaderboard';
+import { btn, btnSize, cn } from './components/ui/styles';
 
 function App() {
   const [user, loading] = useAuthState(auth);
@@ -21,7 +23,8 @@ function App() {
       }
 
       try {
-        const ref = doc(db, 'admins', user.email!);
+        // Lowercased to match the document IDs firestore.rules looks up.
+        const ref = doc(db, 'admins', user.email!.toLowerCase());
         const snap = await getDoc(ref);
         setIsAdmin(snap.exists());
       } catch (err) {
@@ -37,40 +40,56 @@ function App() {
 
   if (loading || !adminChecked) {
     return (
-      <div className="min-h-screen grid place-items-center text-gray-400">
-        Loading...
-      </div>
+      <div className="grid min-h-screen place-items-center text-sm text-ink-subtle">Loading…</div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
-      <div className="max-w-2xl mx-auto px-6 py-10">
-        <header className="flex items-center justify-between mb-10">
-          <h1 className="text-3xl font-bold tracking-tight">🍽️ Weekly Lunch Vote</h1>
-          {isAdmin && (
-            <a
-              href="/admin"
-              className="text-sm font-medium text-purple-600 hover:underline transition ml-4"
+    <div className="min-h-screen bg-canvas text-ink">
+      <header className="border-b border-border bg-surface">
+        <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 sm:px-6">
+          {/* Wordmark lockup — replace the mark + eyebrow with the real Calvada asset. */}
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="flex h-9 w-9 items-center justify-center rounded-field bg-brand-500 text-on-brand"
             >
-              Admin
-            </a>
-          )}
-          {user && (
-            <button
-              onClick={logout}
-              className="text-sm font-medium text-blue-600 hover:underline transition"
-            >
-              Logout
-            </button>
-          )}
-        </header>
+              <UtensilsCrossed size={18} strokeWidth={2.25} />
+            </span>
+            <span className="leading-tight">
+              <span className="block text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
+                Calvada
+              </span>
+              <span className="block font-display text-lg font-extrabold tracking-tight">
+                Lunch Vote
+              </span>
+            </span>
+          </div>
 
+          {/* Actions stay grouped — justify-between with 3 loose children pushed
+              the admin link into the middle of the bar. */}
+          <div className="flex items-center gap-2">
+            {isAdmin && (
+              <a href="/admin" className={cn(btn.secondary, btnSize.sm)}>
+                <Shield size={15} strokeWidth={2.25} aria-hidden="true" />
+                Admin
+              </a>
+            )}
+            {user && (
+              <button onClick={logout} className={cn(btn.quiet, 'px-2.5 py-1.5')}>
+                <LogOut size={15} strokeWidth={2.25} aria-hidden="true" />
+                Sign out
+              </button>
+            )}
+          </div>
+        </div>
+      </header>
+
+      <main className="mx-auto max-w-2xl space-y-8 px-5 py-8 sm:px-6 sm:py-10">
         {!user && <Login onLogin={loginWithGoogle} />}
         {user && <Voting user={user} />}
-
         <Leaderboard />
-      </div>
+      </main>
     </div>
   );
 }
