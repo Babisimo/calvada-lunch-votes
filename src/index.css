@@ -131,67 +131,77 @@
    DARK MODE — the night shift
    Same counter, lights down: oiled walnut ground, dim manila ticket. Because
    every component reads tokens rather than raw Tailwind palette classes, this
-   block is the entire dark theme — no component changes, no `dark:` variants.
+   block is the entire dark theme — no component changes, no `dark:` variants,
+   and it should stay that way.
+
+   OPT-IN ONLY. This is keyed to an explicit [data-theme="dark"] on <html>, NOT
+   to `prefers-color-scheme`. The kraft ticket is the identity of the app and
+   everyone gets it by default, including people whose OS is set to dark; night
+   shift is something you choose in the header. Bare :root above is therefore
+   the complete light palette and the fallback when JavaScript never runs.
+   See src/components/utils/theme.ts and the inline script in index.html.
 
    The saturated accents LIGHTEN here. #b33a2b on a near-black ground measures
    2.9:1 and is unreadable; #e0705c measures 5.4:1.
    ========================================================================== */
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-canvas: #17130f;
-    --color-surface: #211c16;
-    --color-surface-muted: #2a231b;
-    --color-border: #3a3128;
-    --color-border-strong: #554839;
-    --color-ink: #ede4d6;
-    --color-ink-muted: #b3a794;
-    --color-ink-subtle: #8f8471;
-    --color-ink-inverse: #17130f;
+:root[data-theme="dark"] {
+  --color-canvas: #17130f;
+  --color-surface: #211c16;
+  --color-surface-muted: #2a231b;
+  --color-border: #3a3128;
+  --color-border-strong: #554839;
+  --color-ink: #ede4d6;
+  --color-ink-muted: #b3a794;
+  --color-ink-subtle: #8f8471;
+  --color-ink-inverse: #17130f;
 
-    --color-brand-50: #10241a;
-    --color-brand-100: #14331f;
-    --color-brand-200: #1b4d2e;
-    --color-brand-300: #277143;
-    --color-brand-400: #2f9a58;
-    --color-brand-500: #3cc074;
-    --color-brand-600: #4bd083;
-    --color-brand-700: #74dc9f;
-    --color-brand-800: #a5e9c1;
-    --color-brand-900: #d3f5e2;
-    --color-on-brand: #17130f;
-    --color-brand-hover: #63dc95;
-    --color-brand-active: #7ce6a8;
+  --color-brand-50: #10241a;
+  --color-brand-100: #14331f;
+  --color-brand-200: #1b4d2e;
+  --color-brand-300: #277143;
+  --color-brand-400: #2f9a58;
+  --color-brand-500: #3cc074;
+  --color-brand-600: #4bd083;
+  --color-brand-700: #74dc9f;
+  --color-brand-800: #a5e9c1;
+  --color-brand-900: #d3f5e2;
+  --color-on-brand: #17130f;
+  --color-brand-hover: #63dc95;
+  --color-brand-active: #7ce6a8;
 
-    /* Stamp ramp inverts the same way — the ink is now printed in light. */
-    --color-stamp-50: #2c1512;
-    --color-stamp-100: #3d1c17;
-    --color-stamp-200: #572720;
-    --color-stamp-300: #7c3a2d;
-    --color-stamp-400: #a8523f;
-    --color-stamp-500: #c96551;
-    --color-stamp-600: #e0705c;
-    --color-stamp-700: #ec9484;
-    --color-stamp-800: #f4b6aa;
-    --color-stamp-900: #fad7d0;
-    --color-on-stamp: #17130f;
+  /* Stamp ramp inverts the same way — the ink is now printed in light. */
+  --color-stamp-50: #2c1512;
+  --color-stamp-100: #3d1c17;
+  --color-stamp-200: #572720;
+  --color-stamp-300: #7c3a2d;
+  --color-stamp-400: #a8523f;
+  --color-stamp-500: #c96551;
+  --color-stamp-600: #e0705c;
+  --color-stamp-700: #ec9484;
+  --color-stamp-800: #f4b6aa;
+  --color-stamp-900: #fad7d0;
+  --color-on-stamp: #17130f;
 
-    --color-danger-50: #2e1310;
-    --color-danger-200: #4f1f18;
-    --color-danger-500: #e0402f;
-    --color-danger-600: #cf2f1e;
-    --color-danger-700: #ff9c8c;
-    --color-danger-900: #ffc9c0;
-    --color-danger-hover: #b82a19;
-    --color-danger-active: #941f12;
+  --color-danger-50: #2e1310;
+  --color-danger-200: #4f1f18;
+  --color-danger-500: #e0402f;
+  --color-danger-600: #cf2f1e;
+  --color-danger-700: #ff9c8c;
+  --color-danger-900: #ffc9c0;
+  --color-danger-hover: #b82a19;
+  --color-danger-active: #941f12;
 
-    --color-warning-50: #2a2110;
-    --color-warning-600: #e0a030;
-    --color-warning-800: #f5d19a;
+  --color-warning-50: #2a2110;
+  --color-warning-600: #e0a030;
+  --color-warning-800: #f5d19a;
 
-    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.5), 0 10px 22px -14px rgb(0 0 0 / 0.85);
-    --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.6), 0 18px 34px -18px rgb(0 0 0 / 0.9);
-  }
+  --shadow-card: 0 1px 0 rgb(0 0 0 / 0.5), 0 10px 22px -14px rgb(0 0 0 / 0.85);
+  --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.6), 0 18px 34px -18px rgb(0 0 0 / 0.9);
+
+  /* Tells the browser to paint dark form controls, scrollbars and the page
+     ground behind the app. Without it the native chrome stays light. */
+  color-scheme: dark;
 }
 
 @layer base {

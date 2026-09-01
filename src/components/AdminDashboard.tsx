@@ -32,6 +32,7 @@ import AdminWeekControl from './AdminWeekControl';
 
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
+import ThemeToggle from './ui/ThemeToggle';
 import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
 import { currentIsoWeekKey } from './utils/isoWeek';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -256,6 +257,7 @@ export default function AdminDashboard() {
           </div>
 
           <nav className="flex items-center gap-1.5">
+            <ThemeToggle />
             <button onClick={() => navigate('/votes')} className={cn(btn.quiet, 'px-2.5 py-1.5')}>
               <Users size={15} strokeWidth={2.25} aria-hidden="true" />
               Votes

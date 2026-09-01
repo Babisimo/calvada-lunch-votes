@@ -17,8 +17,30 @@
 
     <title>Calvada Lunch Vote</title>
     <meta name="description" content="Pick this week's team lunch at Calvada." />
+    <!-- Updated by applyTheme(); the value here is the light canvas. -->
     <meta name="theme-color" content="#e8e0d4" />
-    <meta name="theme-color" content="#17130f" media="(prefers-color-scheme: dark)" />
+
+    <!--
+      Paint the stored theme BEFORE first paint, otherwise someone who chose
+      dark gets a flash of kraft on every load. Deliberately not driven by
+      prefers-color-scheme: light is the default for everyone and dark is opt-in.
+      Keep the storage key in sync with src/components/utils/theme.ts.
+    -->
+    <script>
+      (function () {
+        var theme = 'light';
+        try {
+          if (localStorage.getItem('calvada-lunch-theme') === 'dark') theme = 'dark';
+        } catch (e) {
+          /* storage blocked — fall through to light */
+        }
+        document.documentElement.dataset.theme = theme;
+        if (theme === 'dark') {
+          var meta = document.querySelector('meta[name="theme-color"]');
+          if (meta) meta.setAttribute('content', '#17130f');
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

@@ -84,15 +84,41 @@ Brand is Calvada green `#238d4f`:
 - `--color-on-brand` is the text color that sits on a brand fill; it flips in
   dark mode where the greens lighten
 
-The brand is green, so "success green" would be a second competing green.
-**Affirmative states (winner, selected, on-ballot) use brand tokens.**
+**Green is IDENTITY, not result.** It appears in exactly three places: the
+wordmark, the confirm button, and the "your vote is in" mark. Every affirmative
+*result* state (winner, selected option, on-ballot) uses `stamp-*` instead —
+green-as-winning on a cool ground was what made the app read as a betting slip.
 `success-*` is reserved for toast icons only.
 
-### Dark mode
-Token overrides in one `@media (prefers-color-scheme: dark)` block. No `dark:`
-variants in any component, and it should stay that way. Note `danger-600` is
-deliberately *not* lightened there — white-on-`#dc2626` is 4.8:1 regardless of
-the page behind it.
+`danger-*` is warmed so it doesn't read as a stray cool red on kraft, but stays
+more saturated than `stamp-*` so the two remain distinguishable. They never
+share a screen: stamp is decorative and affirmative, danger is destructive and
+admin-only.
+
+### Dark mode — opt-in, not OS-driven
+Token overrides live in one `:root[data-theme="dark"]` block. No `dark:`
+variants in any component, and it should stay that way.
+
+**It is deliberately NOT keyed to `prefers-color-scheme`.** The kraft ticket is
+the identity of the app, so everyone gets it by default — including people whose
+OS is set to dark. Night shift is a choice made with the header toggle and
+remembered per browser in `localStorage`.
+
+Three pieces have to stay in sync:
+- `src/index.css` — bare `:root` is the complete light palette and the fallback
+  when JavaScript never runs; `:root[data-theme="dark"]` overrides it.
+- `src/components/utils/theme.ts` — reads, applies and persists the choice.
+- The inline `<script>` in `index.html` — paints the stored theme *before* first
+  paint, otherwise anyone on dark gets a flash of kraft on every load. It
+  duplicates the storage key and the accepted values on purpose; changing either
+  means changing both.
+
+`ThemeToggle` is mounted in both headers (`App.tsx` and `AdminDashboard.tsx`).
+The two instances don't share React state — they never appear together, and each
+initialises from storage.
+
+Saturated accents LIGHTEN in dark: `#b33a2b` measures 2.9:1 on the dark ground
+and is unreadable, so `stamp-600` becomes `#e0705c` at 5.4:1.
 
 ### Winner shape
 Both the browser tally and the optional Cloud Function write the identical

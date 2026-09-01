@@ -8,6 +8,7 @@ import Login from './components/Login';
 import Voting from './components/Voting';
 import Leaderboard from './components/Leaderboard';
 import { btn, btnSize, cn } from './components/ui/styles';
+import ThemeToggle from './components/ui/ThemeToggle';
 
 function App() {
   const [user, loading] = useAuthState(auth);
@@ -69,6 +70,7 @@ function App() {
           {/* Actions stay grouped — justify-between with 3 loose children pushed
               the admin link into the middle of the bar. */}
           <div className="flex items-center gap-2">
+            <ThemeToggle />
             {isAdmin && (
               <a href="/admin" className={cn(btn.secondary, btnSize.sm)}>
                 <Shield size={15} strokeWidth={2.25} aria-hidden="true" />
