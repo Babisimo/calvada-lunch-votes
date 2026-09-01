@@ -85,6 +85,32 @@ needs rotating. The rules are what protect the data.
 which is an update, and `firestore.rules` denies updates. Changing the ID shape
 means changing the matching `voteId ==` check in the rules.
 
+### Ties are never resolved automatically
+`Leaderboard.tsx` detects a tie for the top spot and **writes nothing**. That is
+deliberate and load-bearing, not an oversight:
+
+`firestore.rules` allows exactly **one** winner write per voting window
+(`decidedForEndMs`). Spending it on an automatic pick makes that pick permanent
+and uncorrectable. The old behaviour handed ties to whichever option was drawn
+first on the ballot — invisible, and biased toward ballot position.
+
+A tie now waits for an admin to flip a coin in `/admin` (`AdminTieBreaker.tsx`).
+The admin's browser throws it once, writes the result tagged
+`viaFlip: true` + `tiedBetween: [...]`, and every visitor's `CoinFlip` component
+*replays* that recorded result. **The coin never decides anything** — if it never
+ran, the winner would be identical. That separation is what makes it safe.
+
+**No rules change was needed.** The winner-write path is gated on `isCalvada()`,
+which an `@calvada.com` admin already satisfies, and extra subfields inside
+`winner` are unconstrained. An admin whose email is *not* `@calvada.com` could
+not flip — no such admin exists today.
+
+Tie detection lives in one place, `utils/tie.ts`. The repo previously carried
+three tiebreakers that disagreed (ballot order here, ballot order in
+`functions/index.js`, `Math.random()` in a dead `services/winner.tsx`, since
+deleted). If you deploy the Cloud Function, its tiebreak must be changed to
+match — bail on a tie rather than resolving it.
+
 ### Design tokens
 `src/index.css` is the single source of truth. Everything reads tokens
 (`bg-brand-600`, `text-ink-muted`, `rounded-card`), nothing reads raw Tailwind

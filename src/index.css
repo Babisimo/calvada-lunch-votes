@@ -328,6 +328,48 @@
     margin-bottom: 0.3rem;
     border-bottom: 2px dotted var(--color-border-strong);
   }
+
+  /* ---- The coin -----------------------------------------------------------
+     Replays a flip the admin already made; see ui/CoinFlip.tsx. Two animations
+     on nested elements — the wrapper tosses, the inner spins — because one
+     transform property cannot run two independent timing curves.
+
+     The only round thing in a square app. A coin has earned it. */
+  .coin-stage {
+    perspective: 700px;
+  }
+
+  .coin-toss {
+    animation: coin-toss 2.2s cubic-bezier(0.33, 0, 0.3, 1) both;
+  }
+
+  .coin-spin {
+    position: relative;
+    width: 5.75rem;
+    height: 5.75rem;
+    transform-style: preserve-3d;
+    /* 1800deg is five whole turns, so it lands on the FRONT face. An odd
+       half-turn here would end on the back and read as the wrong result. */
+    animation: coin-spin 2.2s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  }
+
+  .coin-face {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 9999px;
+    border: 3px solid var(--color-stamp-600);
+    background-color: var(--color-stamp-50);
+    color: var(--color-stamp-600);
+    backface-visibility: hidden;
+    box-shadow: inset 0 0 0 2px var(--color-surface);
+  }
+
+  .coin-face-back {
+    transform: rotateY(180deg);
+  }
 }
 
 /* ============================================================================
@@ -400,6 +442,28 @@
   }
   50% {
     opacity: 0.55;
+  }
+}
+
+/* The toss arc. Paired with coin-spin on a child element — see .coin-toss. */
+@keyframes coin-toss {
+  0% {
+    transform: translateY(0) scale(0.9);
+  }
+  45% {
+    transform: translateY(-3rem) scale(1.06);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes coin-spin {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(1800deg);
   }
 }
 

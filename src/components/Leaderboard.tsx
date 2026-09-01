@@ -12,6 +12,8 @@ import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
 import { Clock, Lock, TimerReset } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, panel, ticketRule } from './ui/styles';
+import { topTie } from './utils/tie';
+import CoinFlip from './ui/CoinFlip';
 
 function toMillis(v: any): number {
   if (!v) return 0;
@@ -45,6 +47,30 @@ function hashString(input: string): number {
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
+}
+
+/**
+ * The coin flip plays once per person per week, then the result just sits there.
+ * A 2.2-second animation on every page load for the rest of the week would wear
+ * out fast. Guarded because localStorage throws outright in some contexts —
+ * worst case someone sees the flip twice, which is harmless.
+ */
+const FLIP_SEEN_KEY = 'calvada-lunch-flip-seen';
+
+function hasSeenFlip(weekKey: string): boolean {
+  try {
+    return localStorage.getItem(FLIP_SEEN_KEY) === weekKey;
+  } catch {
+    return false;
+  }
+}
+
+function markFlipSeen(weekKey: string): void {
+  try {
+    localStorage.setItem(FLIP_SEEN_KEY, weekKey);
+  } catch {
+    // Session-only. They'll see it again next load; not worth handling.
+  }
 }
 
 const ONE_HOUR_MS = 60 * 60 * 1000;
@@ -179,15 +205,17 @@ export default function Leaderboard() {
         const total = Object.values(tallyByKey).reduce((a, b) => a + b, 0);
         if (total <= 0) return;
 
-        // Ties break by ballot order, so a re-run always agrees with itself.
         const max = Math.max(...Object.values(tallyByKey));
-        const winnerKey = Object.keys(tallyByKey)
-          .filter((k) => tallyByKey[k] === max)
-          .sort(
-            (a, b) =>
-              weeklyChoices.findIndex((c) => normalizeKey(c) === a) -
-              weeklyChoices.findIndex((c) => normalizeKey(c) === b)
-          )[0];
+        const topKeys = Object.keys(tallyByKey).filter((k) => tallyByKey[k] === max);
+
+        // A TIE IS NOT RESOLVED HERE. It used to fall to whichever option was
+        // drawn first on the ballot, which is both invisible and biased — and
+        // worse, that write spends the single winner write firestore.rules
+        // allows per voting window, making the arbitrary pick permanent.
+        // Leaving it unwritten is what surfaces the coin flip in /admin.
+        if (topKeys.length > 1) return;
+
+        const winnerKey = topKeys[0];
         const winnerName = labelByKey.get(winnerKey) ?? winnerKey;
 
         const weeklyRef = doc(db, 'weeklyOptions', weekKey);
@@ -232,17 +260,52 @@ export default function Leaderboard() {
     totalVotes > 0 &&
     (weeklyUpdatedAtMs === 0 || decidedAtMs >= weeklyUpdatedAtMs);
 
+  // A tie is never resolved automatically — see the decide effect above. Until
+  // an admin flips, the week genuinely has no winner, which is a different
+  // state from "the result is a second away".
+  const tiedTop = useMemo(() => topTie(results), [results]);
+  const awaitingFlip = windowClosed && totalVotes > 0 && !showWinnerBanner && tiedTop.length > 1;
+
   // Closed with votes in, but the tally above hasn't landed yet. Usually a
   // second; longer if the voting window has no numeric endMs saved.
-  const awaitingResult = windowClosed && totalVotes > 0 && !showWinnerBanner;
+  const awaitingResult =
+    windowClosed && totalVotes > 0 && !showWinnerBanner && tiedTop.length <= 1;
+
+  // Replay of a flip the admin already made. `flipStage` starts 'unknown' so we
+  // decide once, after the winner has actually loaded, whether this visitor
+  // gets the animation or goes straight to the settled result.
+  const [flipStage, setFlipStage] = useState<'unknown' | 'play' | 'done'>('unknown');
 
   useEffect(() => {
-    if (!showWinnerBanner || hasCelebratedRef.current) return;
+    if (flipStage !== 'unknown') return;
+    if (!showWinnerBanner) return;
+
+    if (!weeklyWinner?.viaFlip) {
+      setFlipStage('done');
+      return;
+    }
+    // Seen it, or asked not to be animated at — skip to the result.
+    if (prefersReducedMotion() || hasSeenFlip(weekKey)) {
+      setFlipStage('done');
+      return;
+    }
+    setFlipStage('play');
+  }, [flipStage, showWinnerBanner, weeklyWinner, weekKey]);
+
+  const playingFlip = flipStage === 'play';
+
+  // Gated on flipStage rather than showWinnerBanner: on a flip-decided week the
+  // winner is known the moment the page loads, so celebrating on that alone
+  // would fire the confetti while the coin is still in the air. 'done' is
+  // reached immediately for an ordinary week and after the coin lands for a
+  // flipped one, which is exactly when the stamp appears.
+  useEffect(() => {
+    if (!showWinnerBanner || flipStage !== 'done' || hasCelebratedRef.current) return;
     hasCelebratedRef.current = true;
     if (prefersReducedMotion()) return;
     confetti({ particleCount: 90, spread: 70, origin: { y: 0.7 } });
     setTimeout(() => confetti({ particleCount: 110, spread: 100, origin: { y: 0.75 } }), 350);
-  }, [showWinnerBanner]);
+  }, [showWinnerBanner, flipStage]);
 
   // Same week + same winner => same line for everyone. Math.random() re-rolled
   // on every remount and showed different copy to different people.
@@ -351,6 +414,19 @@ export default function Leaderboard() {
         </div>
       )}
 
+      {awaitingFlip && (
+        <div className="mt-4 border-y border-stamp-200 bg-stamp-50 px-5 py-3.5 sm:px-6">
+          <p className="ticket-meta text-[0.625rem] text-stamp-600">
+            TIE — {tiedTop.length} WAY
+          </p>
+          <p className="mt-1.5 text-sm text-ink-muted">
+            {/* Names the deadlock rather than saying "a tie" — people want to
+                know which two, and it explains why nothing has been decided. */}
+            {tiedTop.join(' and ')} are level. An admin flips a coin to settle it.
+          </p>
+        </div>
+      )}
+
       <div className="px-5 pb-6 pt-5 sm:px-6">
         {weeklyChoices.length === 0 && results.length === 0 ? (
           <p className="py-6 text-center text-sm text-ink-subtle">
@@ -417,7 +493,21 @@ export default function Leaderboard() {
               </span>
             </div>
 
-            {showWinnerBanner && (
+            {/* A flip-decided week performs the coin first, then stamps. The
+                coin only replays a result the admin already wrote — see
+                ui/CoinFlip.tsx — so the stamp below is the same either way. */}
+            {playingFlip && (
+              <CoinFlip
+                tiedBetween={weeklyWinner?.tiedBetween ?? []}
+                winner={weeklyWinner?.name ?? ''}
+                onDone={() => {
+                  markFlipSeen(weekKey);
+                  setFlipStage('done');
+                }}
+              />
+            )}
+
+            {showWinnerBanner && !playingFlip && (
               // The one orchestrated moment in the app, once a week. Rotated in
               // place rather than absolutely positioned — an overlay would sit
               // on top of the tally at narrow widths. Not color-only: the word
@@ -435,7 +525,7 @@ export default function Leaderboard() {
               </div>
             )}
 
-            {showWinnerBanner && <p className="sr-only">{bannerText}</p>}
+            {showWinnerBanner && !playingFlip && <p className="sr-only">{bannerText}</p>}
           </>
         )}
       </div>

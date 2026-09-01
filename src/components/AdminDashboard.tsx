@@ -33,6 +33,7 @@ import AdminWeekControl from './AdminWeekControl';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
 import ThemeToggle from './ui/ThemeToggle';
+import AdminTieBreaker from './AdminTieBreaker';
 import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
 import { currentIsoWeekKey } from './utils/isoWeek';
 import { useConfirm } from './ui/ConfirmDialog';
@@ -292,6 +293,11 @@ export default function AdminDashboard() {
             over.
           </p>
         ) : null}
+
+        {/* Renders nothing unless the week closed on a tie. It is placed above
+            the setup panels on purpose: when it does appear, it is the only
+            thing standing between the team and knowing what they're eating. */}
+        <AdminTieBreaker weekKey={weekKey} />
 
         {/* Setup pair — these two are always configured together. */}
         <div className="grid gap-5 lg:grid-cols-2">
