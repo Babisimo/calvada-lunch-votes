@@ -1,27 +1,38 @@
 @import "tailwindcss";
 
 /* ============================================================================
-   CALVADA LUNCH VOTE — DESIGN TOKENS
+   CALVADA LUNCH VOTE — DESIGN TOKENS · "ORDER TICKET"
    ----------------------------------------------------------------------------
    Single source of truth for the whole app. Tailwind v4 reads this block and
-   generates the utilities (bg-brand-600, text-ink-muted, rounded-card, ...).
+   generates the utilities (bg-canvas, text-ink-muted, font-mono, ...).
    There is no tailwind.config.ts — v4 is CSS-first.
 
-   >>> TO APPLY THE REAL CALVADA PALETTE: edit ONLY the BRAND + ACCENT blocks
-   >>> below. Every component consumes tokens, so nothing else needs to change.
+   THE DIRECTION
+   The app is the carbon-copy order pad at a lunch counter: a kraft ground with
+   a ticket torn off onto it. This replaced a blue-grey SaaS canvas that read as
+   a sportsbook — blue is the strongest appetite suppressant there is, and a
+   ranked percentage bar in green is an odds board.
 
-   Contrast notes (WCAG AA, measured):
-     white on brand-600    4.9:1  OK — this is why buttons use 600, not 500
-     white on brand-500    4.2:1  FAILS body text. Fills / large type only.
-     white on danger-600   4.8:1  OK
-     ink-muted on surface  6.1:1  OK
-     ink-subtle on surface 5.0:1  OK
+   Three rules hold the direction together:
+     1. The ground is warm. Nothing in the neutral ramp is blue.
+     2. Green means CALVADA, not "winning". It appears twice: the wordmark and
+        the confirm button. Affirmative results are STAMP red instead.
+     3. Counts are set on a dot leader, never a bar. See Leaderboard.tsx.
+
+   Contrast (WCAG AA, measured against the surface each color sits on):
+     ink on surface           16.2:1  OK
+     ink-muted on surface      5.9:1  OK
+     ink-subtle on surface     4.8:1  OK
+     stamp-600 on surface      5.7:1  OK
+     white on stamp-600        5.9:1  OK
+     white on brand-600        4.9:1  OK — why buttons use 600, not 500
+     white on brand-500        4.2:1  FAILS body text. Fills / large type only.
    ========================================================================== */
 
 @theme {
-  /* ---- BRAND — Calvada green. Primary action, bars, affirmative states. ----
-     brand-500 (#238d4f) is the official brand color. It measures 4.2:1 against
-     white, just under AA, so anything with white TEXT on it uses brand-600. */
+  /* ---- BRAND — Calvada green. Identity only: wordmark, confirm, "vote is in".
+     Deliberately NOT the result color. brand-500 (#238d4f) is the official
+     brand value; anything carrying white TEXT uses brand-600. ---- */
   --color-brand-50: #edfaf2;
   --color-brand-100: #d2f2e0;
   --color-brand-200: #a8e6c4;
@@ -37,20 +48,37 @@
   --color-brand-hover: #1a6d3d;
   --color-brand-active: #155832;
 
-  /* ---- ACCENT — unassigned. No secondary brand color specified yet, so
-     nothing in the app uses these. Fill them in if/when one is chosen. ---- */
-  --color-accent-50: #fffbeb;
-  --color-accent-100: #fef3c7;
-  --color-accent-200: #fde68a;
-  --color-accent-300: #fcd34d;
-  --color-accent-400: #fbbf24;
-  --color-accent-500: #f59e0b;
-  --color-accent-600: #d97706;
+  /* ---- STAMP — the accent that took over from green ------------------------
+     Rubber-stamp / ticket-ink red. This is what marks the winner, the checked
+     ballot box, and the leader in the standing. Warm enough to sit on kraft
+     without vibrating against it. */
+  --color-stamp-50: #fbeae5;
+  --color-stamp-100: #f6d2c9;
+  --color-stamp-200: #eaa696;
+  --color-stamp-300: #d9836f;
+  --color-stamp-400: #c55b45;
+  --color-stamp-500: #c2412f;
+  --color-stamp-600: #b33a2b; /* ← the stamp itself */
+  --color-stamp-700: #94301f;
+  --color-stamp-800: #74261a;
+  --color-stamp-900: #571d14;
 
-  /* ---- SEMANTIC — meaning, not decoration ----------------------------------
-     The brand is green, so "success green" would be a second, competing green.
-     Affirmative UI states (winner, selected, on-ballot) therefore use BRAND
-     tokens. success-* is reserved for transient toast icons only. */
+  /* ---- SEMANTIC ------------------------------------------------------------
+     danger is a genuinely different job from stamp: stamp is decorative and
+     affirmative, danger is destructive and only ever appears in admin screens.
+     They never share a screen. danger is warmed so it doesn't read as a stray
+     cool red on kraft, but stays more saturated than stamp so the two are
+     distinguishable if they ever do meet. */
+  --color-danger-50: #fdeceb;
+  --color-danger-200: #f8c9c5;
+  --color-danger-500: #e0402f;
+  --color-danger-600: #cf2f1e;
+  --color-danger-700: #a62416;
+  --color-danger-900: #6b1710;
+  --color-danger-hover: #a62416;
+  --color-danger-active: #6b1710;
+
+  /* Toast icons only — never a UI state. */
   --color-success-50: #ecfdf5;
   --color-success-200: #a7f3d0;
   --color-success-500: #10b981;
@@ -59,67 +87,67 @@
   --color-success-800: #065f46;
   --color-success-900: #064e3b;
 
-  --color-danger-50: #fef2f2;
-  --color-danger-200: #fecaca;
-  --color-danger-500: #ef4444;
-  --color-danger-600: #dc2626;
-  --color-danger-700: #b91c1c;
-  --color-danger-900: #7f1d1d;
-  --color-danger-hover: #b91c1c;
-  --color-danger-active: #7f1d1d;
+  --color-warning-50: #fdf3e0;
+  --color-warning-600: #b7791f;
+  --color-warning-800: #7a4e12;
 
-  --color-warning-50: #fffbeb;
-  --color-warning-600: #d97706;
-  --color-warning-800: #92400e;
-
-  /* ---- SURFACE + INK — the quiet 90% of the UI ---------------------------- */
-  --color-canvas: #f6f7fa;
-  --color-surface: #ffffff;
-  --color-surface-muted: #f1f3f7;
-  --color-border: #e3e7ef;
-  --color-border-strong: #c9d0e0;
-  --color-ink: #16181d;
-  --color-ink-muted: #5b6272;
-  --color-ink-subtle: #667085;
-  --color-ink-inverse: #ffffff;
+  /* ---- SURFACE + INK — kraft ground, ticket stock, ticket ink -------------- */
+  --color-canvas: #e8e0d4;        /* kraft / the counter */
+  --color-surface: #fdfbf7;       /* ticket stock */
+  --color-surface-muted: #f2ece1; /* hover, recessed rows */
+  --color-border: #dcd2c2;
+  --color-border-strong: #b9ae9d; /* dot leaders and ticket rules */
+  --color-ink: #241f19;
+  --color-ink-muted: #6d6155;
+  --color-ink-subtle: #7b6e5e;
+  --color-ink-inverse: #fdfbf7;
   /* Text/icon color that sits ON a saturated brand fill. Flips in dark mode,
      where the brand greens lighten and white would no longer be legible. */
-  --color-on-brand: #ffffff;
+  --color-on-brand: #fdfbf7;
+  --color-on-stamp: #fdfbf7;
 
-  /* ---- TYPE ---------------------------------------------------- SWAP ME -- */
-  --font-display: "Bricolage Grotesque", "Inter", ui-sans-serif, system-ui, sans-serif;
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  /* ---- TYPE ----------------------------------------------------------------
+     Archivo is variable on BOTH width and weight. That width axis is the type
+     move of the direction: expanded for the wordmark, heavily condensed for
+     headlines, exactly like the printing on a real order pad. Component classes
+     .ticket-title / .ticket-mark below drive it — don't hand-roll the axis. */
+  --font-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
 
-  /* ---- RADIUS + ELEVATION ------------------------------------------------- */
-  --radius-field: 0.5rem;
-  --radius-card: 0.875rem;
-  --radius-panel: 1.125rem;
+  /* ---- RADIUS + ELEVATION --------------------------------------------------
+     A ticket has crisp corners. Everything is square; the torn top edge is what
+     supplies the character instead. */
+  --radius-field: 0rem;
+  --radius-card: 0rem;
+  --radius-panel: 0rem;
 
-  --shadow-card: 0 1px 2px rgb(22 24 29 / 0.04), 0 4px 16px -8px rgb(22 24 29 / 0.12);
-  --shadow-lift: 0 2px 4px rgb(22 24 29 / 0.06), 0 12px 28px -12px rgb(22 24 29 / 0.22);
+  /* Warm-tinted, because a shadow on kraft is not neutral grey. */
+  --shadow-card: 0 1px 0 rgb(36 31 25 / 0.09), 0 10px 22px -14px rgb(36 31 25 / 0.5);
+  --shadow-lift: 0 1px 0 rgb(36 31 25 / 0.12), 0 18px 34px -18px rgb(36 31 25 / 0.62);
 }
 
 /* ============================================================================
-   DARK MODE
-   Only the surface/ink ramp and the brand ramp move. Because every component
-   reads tokens rather than raw Tailwind palette classes, this block is the
-   entire dark theme — no component changes, no `dark:` variants to maintain.
+   DARK MODE — the night shift
+   Same counter, lights down: oiled walnut ground, dim manila ticket. Because
+   every component reads tokens rather than raw Tailwind palette classes, this
+   block is the entire dark theme — no component changes, no `dark:` variants.
 
-   The brand greens LIGHTEN here: #238d4f on a near-black canvas is too dim to
-   read, and white text on it fails. Lightened fills take dark text instead,
-   via --color-on-brand.
+   The saturated accents LIGHTEN here. #b33a2b on a near-black ground measures
+   2.9:1 and is unreadable; #e0705c measures 5.4:1.
    ========================================================================== */
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --color-canvas: #0e1014;
-    --color-surface: #161a20;
-    --color-surface-muted: #1e232b;
-    --color-border: #2a313b;
-    --color-border-strong: #3b4350;
-    --color-ink: #e7eaee;
-    --color-ink-muted: #a9b2bf;
-    --color-ink-subtle: #8d97a5;
+    --color-canvas: #17130f;
+    --color-surface: #211c16;
+    --color-surface-muted: #2a231b;
+    --color-border: #3a3128;
+    --color-border-strong: #554839;
+    --color-ink: #ede4d6;
+    --color-ink-muted: #b3a794;
+    --color-ink-subtle: #8f8471;
+    --color-ink-inverse: #17130f;
 
     --color-brand-50: #10241a;
     --color-brand-100: #14331f;
@@ -131,28 +159,38 @@
     --color-brand-700: #74dc9f;
     --color-brand-800: #a5e9c1;
     --color-brand-900: #d3f5e2;
-    --color-on-brand: #0e1014;
-
-    /* Interactive fills brighten on dark instead of darkening. */
+    --color-on-brand: #17130f;
     --color-brand-hover: #63dc95;
     --color-brand-active: #7ce6a8;
-    --color-danger-hover: #ef5f63;
-    --color-danger-active: #f5878a;
 
-    /* danger-600 is NOT lightened: white-on-#dc2626 is 4.8:1 regardless of the
-       page behind it, and lightening the fill would break that. Only the
-       danger SURFACE and its text move. */
-    --color-danger-50: #2a1416;
-    --color-danger-200: #4d1f24;
-    --color-danger-700: #ff9ea1;
-    --color-danger-900: #ffc9cb;
+    /* Stamp ramp inverts the same way — the ink is now printed in light. */
+    --color-stamp-50: #2c1512;
+    --color-stamp-100: #3d1c17;
+    --color-stamp-200: #572720;
+    --color-stamp-300: #7c3a2d;
+    --color-stamp-400: #a8523f;
+    --color-stamp-500: #c96551;
+    --color-stamp-600: #e0705c;
+    --color-stamp-700: #ec9484;
+    --color-stamp-800: #f4b6aa;
+    --color-stamp-900: #fad7d0;
+    --color-on-stamp: #17130f;
+
+    --color-danger-50: #2e1310;
+    --color-danger-200: #4f1f18;
+    --color-danger-500: #e0402f;
+    --color-danger-600: #cf2f1e;
+    --color-danger-700: #ff9c8c;
+    --color-danger-900: #ffc9c0;
+    --color-danger-hover: #b82a19;
+    --color-danger-active: #941f12;
 
     --color-warning-50: #2a2110;
     --color-warning-600: #e0a030;
     --color-warning-800: #f5d19a;
 
-    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px -8px rgb(0 0 0 / 0.6);
-    --shadow-lift: 0 2px 4px rgb(0 0 0 / 0.5), 0 12px 28px -12px rgb(0 0 0 / 0.7);
+    --shadow-card: 0 1px 0 rgb(0 0 0 / 0.5), 0 10px 22px -14px rgb(0 0 0 / 0.85);
+    --shadow-lift: 0 1px 0 rgb(0 0 0 / 0.6), 0 18px 34px -18px rgb(0 0 0 / 0.9);
   }
 }
 
@@ -174,13 +212,14 @@
   h2,
   h3 {
     font-family: var(--font-display);
-    letter-spacing: -0.02em;
+    letter-spacing: -0.01em;
     text-wrap: balance;
   }
 
-  /* Keyboard users get a visible, consistent ring everywhere. */
+  /* Keyboard users get a visible, consistent ring everywhere. Stamp red, not
+     brand green — green is reserved for identity and confirm. */
   :focus-visible {
-    outline: 2px solid var(--color-brand-600);
+    outline: 2px solid var(--color-stamp-600);
     outline-offset: 2px;
     border-radius: var(--radius-field);
   }
@@ -190,15 +229,94 @@
     outline: none;
   }
 
-  /* Countdowns and percentages must not reflow every tick. */
+  /* Countdowns, counts and percentages must not reflow every tick. */
   time,
   [data-numeric] {
     font-variant-numeric: tabular-nums;
   }
 
   ::selection {
-    background-color: var(--color-brand-100);
+    background-color: var(--color-stamp-100);
     color: var(--color-ink);
+  }
+}
+
+/* ============================================================================
+   TICKET COMPONENTS
+   The three pieces of the direction that are not expressible as Tailwind
+   utilities. Everything else composes from tokens in ui/styles.ts.
+   ========================================================================== */
+
+@layer components {
+  /* ---- Type roles on Archivo's width axis ---------------------------------
+     The whole personality of the direction lives in these two classes. Setting
+     the axis inline in components would scatter it and let it drift. */
+
+  /* Headline: heavily condensed and heavy, like a stamped order-pad header. */
+  .ticket-title {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 76, "wght" 800;
+    text-transform: uppercase;
+    letter-spacing: 0.005em;
+    line-height: 0.98;
+  }
+
+  /* Wordmark and eyebrows: expanded and letterspaced, the opposite extreme. */
+  .ticket-mark {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 118, "wght" 700;
+    text-transform: uppercase;
+    letter-spacing: 0.2em;
+  }
+
+  /* Buttons and controls: normal width, still Archivo so they belong. */
+  .ticket-control {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 100, "wght" 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+
+  /* Ticket metadata: order number, timestamps, counts. */
+  .ticket-meta {
+    font-family: var(--font-mono);
+    letter-spacing: -0.04em;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* ---- The torn-off top edge ----------------------------------------------
+     Drawn as a pseudo-element rather than clip-path: clip-path would crop the
+     paper's drop shadow along with the corners, and the shadow is what lifts
+     the ticket off the kraft. Bites are punched in CANVAS color, so this only
+     works on an element sitting directly on the page ground.
+     Requires `relative` on the host. */
+  .paper-tear::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    right: 0;
+    top: -1px;
+    height: 8px;
+    background-image: radial-gradient(
+      circle at 50% 100%,
+      transparent 5.5px,
+      var(--color-canvas) 6px
+    );
+    background-size: 13px 8px;
+    background-repeat: repeat-x;
+    pointer-events: none;
+  }
+
+  /* ---- Dot leader ---------------------------------------------------------
+     The receipt line that replaced the percentage bar. Sits between a label and
+     its count in a flex row; `self-end` puts it on the text baseline rather
+     than centering it in the row. */
+  .leader {
+    flex: 1 1 auto;
+    min-width: 1rem;
+    align-self: flex-end;
+    margin-bottom: 0.3rem;
+    border-bottom: 2px dotted var(--color-border-strong);
   }
 }
 
@@ -245,14 +363,23 @@
   }
 }
 
-/* Slow, tiny drift. Anything bigger turns celebration into distraction. */
-@keyframes bob {
-  0%,
-  100% {
-    transform: translateY(0) rotate(-4deg);
+/* The stamp lands: dropped from above, overshooting its angle, then settling.
+   This is the one orchestrated moment in the app and it fires once a week. */
+@keyframes stamp-down {
+  0% {
+    opacity: 0;
+    transform: rotate(-2deg) scale(1.9);
   }
-  50% {
-    transform: translateY(-3px) rotate(4deg);
+  55% {
+    opacity: 0.95;
+    transform: rotate(-13deg) scale(0.94);
+  }
+  75% {
+    transform: rotate(-10deg) scale(1.04);
+  }
+  100% {
+    opacity: 1;
+    transform: rotate(-11deg) scale(1);
   }
 }
 
@@ -280,8 +407,8 @@
     animation: banner-in 0.5s cubic-bezier(0.2, 0.7, 0.3, 1) both;
   }
 
-  .animate-bob {
-    animation: bob 2.4s ease-in-out infinite;
+  .animate-stamp {
+    animation: stamp-down 0.5s cubic-bezier(0.3, 0.9, 0.4, 1) 0.2s both;
   }
 
   /* Last hour before the ballot closes. */
@@ -289,7 +416,8 @@
     animation: urgent-pulse 1.6s ease-in-out infinite;
   }
 
-  /* Respect the OS setting — confetti and bar fills included. */
+  /* Respect the OS setting — confetti and the stamp landing included. The
+     stamp still ENDS at its resting angle, it just doesn't travel there. */
   @media (prefers-reduced-motion: reduce) {
     *,
     *::before,

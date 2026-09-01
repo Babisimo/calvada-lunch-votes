@@ -175,7 +175,7 @@ export default function MenuAdmin() {
                     <span className="flex min-w-0 items-center gap-2">
                       <span className="truncate font-medium">{item.name}</span>
                       {isSelected && (
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-200 px-2 py-0.5 text-[0.6875rem] font-bold uppercase tracking-wide text-brand-900">
+                        <span className="ticket-control inline-flex shrink-0 items-center gap-1 bg-stamp-600 px-2 py-0.5 text-[0.5625rem] text-on-stamp">
                           <Check size={11} strokeWidth={3} aria-hidden="true" />
                           On ballot
                         </span>

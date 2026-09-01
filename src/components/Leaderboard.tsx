@@ -9,9 +9,9 @@ import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
 import { normalizeKey } from './utils/normalizeKey';
 import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
-import { Clock, Crown, Lock, TimerReset } from 'lucide-react';
+import { Clock, Lock, TimerReset } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { cn, panel } from './ui/styles';
+import { cn, panel, ticketRule } from './ui/styles';
 
 function toMillis(v: any): number {
   if (!v) return 0;
@@ -47,9 +47,6 @@ function prefersReducedMotion(): boolean {
   return window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
 }
 
-/** Podium markers. Only shown once a choice actually has votes. */
-const MEDALS = ['🥇', '🥈', '🥉'];
-
 const ONE_HOUR_MS = 60 * 60 * 1000;
 
 export default function Leaderboard() {
@@ -67,13 +64,6 @@ export default function Leaderboard() {
 
   const hasCelebratedRef = useRef(false);
   const decidingRef = useRef(false);
-
-  // Bars start at zero and grow into place on first paint.
-  const [barsReady, setBarsReady] = useState(false);
-  useEffect(() => {
-    const id = requestAnimationFrame(() => setBarsReady(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -308,141 +298,145 @@ export default function Leaderboard() {
   })();
 
   return (
-    <section className={cn(panel, 'overflow-hidden')}>
-      <header className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2 border-b border-border px-5 py-4 sm:px-6">
-        <div>
-          <h2 className="font-display text-xl font-bold tracking-tight">Results</h2>
-          {/* The week key is an internal identifier — it stays in the admin
-              screens, where rolling it over is someone's job. Voters just need
-              the count. */}
-          <p className="mt-0.5 text-sm text-ink-subtle">
-            <span data-numeric>{totalVotes}</span> {totalVotes === 1 ? 'vote' : 'votes'}
-          </p>
-        </div>
-
-        {/* Single source of countdown truth — Voting.tsx no longer renders one. */}
+    // No overflow-hidden here: the winner stamp is rotated and its corners must
+    // be allowed past the text column. Radius is 0, so nothing needs clipping.
+    <section className={cn(panel, 'paper-tear relative pt-2')}>
+      <header className="px-5 pt-4 sm:px-6">
         <div
           className={cn(
-            'inline-flex items-center gap-2 rounded-field px-3 py-1.5 text-sm font-semibold transition-colors',
-            timer.tone === 'live'
-              ? 'bg-brand-50 text-brand-800'
-              : 'bg-surface-muted text-ink-subtle'
+            ticketRule,
+            'ticket-meta flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1 pb-2 text-[0.625rem] text-ink-muted'
           )}
         >
-          {/* Only the icon pulses in the last hour — pulsing the digits would
-              fight the per-second updates and make them hard to read. */}
-          <span aria-hidden="true" className={cn(isFinalHour && 'animate-urgent')}>
-            {timer.icon}
+          <span>{windowClosed ? 'CLOSED' : 'OPEN'}</span>
+
+          {/* Single source of countdown truth — Voting.tsx no longer renders
+              one. Only the icon pulses in the last hour; pulsing the digits
+              would fight the per-second updates and make them hard to read. */}
+          <span
+            className={cn(
+              'inline-flex items-center gap-1.5',
+              timer.tone === 'live' ? 'text-stamp-600' : 'text-ink-subtle'
+            )}
+          >
+            <span aria-hidden="true" className={cn(isFinalHour && 'animate-urgent')}>
+              {timer.icon}
+            </span>
+            <span>{timer.label.toUpperCase()}</span>
+            {timer.value && <time data-numeric>{timer.value}</time>}
           </span>
-          <span className="font-normal">{timer.label}</span>
-          {timer.value && (
-            <time data-numeric className="font-semibold">
-              {timer.value}
-            </time>
-          )}
         </div>
+
+        <h2 className="ticket-title mt-4 text-2xl">
+          {windowClosed ? (
+            <>
+              Final
+              <br />
+              count
+            </>
+          ) : (
+            <>
+              Running
+              <br />
+              count
+            </>
+          )}
+        </h2>
       </header>
 
-      {showWinnerBanner && (
-        <div className="animate-banner-in flex items-center gap-3 border-b border-brand-200 bg-brand-50 px-5 py-4 sm:px-6">
-          <span
-            aria-hidden="true"
-            className="animate-bob flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-brand-200 text-brand-900"
-          >
-            <Crown size={18} strokeWidth={2.25} />
-          </span>
-          <p className="font-display text-lg font-bold tracking-tight text-brand-900">
-            {bannerText}
-          </p>
-        </div>
-      )}
-
       {awaitingResult && (
-        <div className="flex items-center gap-3 border-b border-border bg-surface-muted px-5 py-3.5 sm:px-6">
+        <div className="mt-4 flex items-center gap-3 border-y border-border bg-surface-muted px-5 py-3.5 sm:px-6">
           <span aria-hidden="true" className="text-lg">⏳</span>
           <p className="text-sm text-ink-muted">Voting is closed. Counting the final result…</p>
         </div>
       )}
 
-      <div className="px-5 py-5 sm:px-6">
+      <div className="px-5 pb-6 pt-5 sm:px-6">
         {weeklyChoices.length === 0 && results.length === 0 ? (
           <p className="py-6 text-center text-sm text-ink-subtle">
             <span aria-hidden="true" className="mr-1.5">🗳️</span>
             No options set for this week yet.
           </p>
         ) : (
-          <ol className="space-y-4">
-            {results.map((r, idx) => {
-              const percentage = totalVotes > 0 ? (r.count / totalVotes) * 100 : 0;
-              const isWinner = showWinnerBanner && weeklyWinner?.name === r.choice;
+          <>
+            {/* The tally is set as receipt lines, not bars. A dot leader gives
+                the exact count instead of an approximate length — which also
+                means proportion is no longer readable at a glance, so the
+                percentage stays on the line and a TOTAL closes the ticket. */}
+            <ol className="flex flex-col">
+              {results.map((r, idx) => {
+                const percentage = totalVotes > 0 ? (r.count / totalVotes) * 100 : 0;
+                const isWinner = showWinnerBanner && weeklyWinner?.name === r.choice;
 
-              const medal = r.count > 0 ? MEDALS[idx] : undefined;
-
-              return (
-                <li
-                  key={`${r.choice}-${idx}`}
-                  className="animate-rise"
-                  style={{ animationDelay: `${idx * 70}ms` }}
-                >
-                  <div className="mb-1.5 flex items-baseline justify-between gap-3">
-                    <span className="flex min-w-0 items-center gap-2">
-                      {/* Rank is real information here — the list is a standing.
-                          The <ol> carries the order for screen readers, so the
-                          marker itself is decorative. */}
-                      <span
-                        data-numeric
-                        aria-hidden="true"
-                        className={cn(
-                          'w-5 shrink-0 text-sm font-semibold text-ink-subtle',
-                          medal && 'text-base'
-                        )}
-                      >
-                        {medal ?? idx + 1}
-                      </span>
-                      <span
-                        className={cn(
-                          'truncate font-semibold',
-                          isWinner ? 'text-brand-900' : 'text-ink'
-                        )}
-                      >
-                        {r.choice}
-                      </span>
-                      {isWinner && (
-                        // Not color-only: the crown + label carry the meaning too.
-                        <span className="inline-flex shrink-0 items-center gap-1 rounded-full bg-brand-200 px-2 py-0.5 text-[0.6875rem] font-bold uppercase tracking-wide text-brand-900">
-                          <Crown size={11} strokeWidth={2.75} aria-hidden="true" />
-                          Winner
-                        </span>
-                      )}
+                return (
+                  <li
+                    key={`${r.choice}-${idx}`}
+                    className="animate-rise flex items-baseline gap-2.5 py-1.5"
+                    style={{ animationDelay: `${idx * 70}ms` }}
+                  >
+                    {/* Rank is real information — the list is a standing, and an
+                        order pad numbers its lines anyway. The <ol> carries the
+                        order for screen readers, so this marker is decorative. */}
+                    <span
+                      data-numeric
+                      aria-hidden="true"
+                      className="ticket-meta w-4 shrink-0 text-[0.625rem] text-ink-subtle"
+                    >
+                      {idx + 1}
                     </span>
-                    {/* Percent alone hides sample size: 33% of 3 ≠ 33% of 60. */}
-                    <span data-numeric className="shrink-0 text-sm text-ink-muted">
-                      <span className="font-semibold text-ink">{r.count}</span>
+
+                    <span
+                      className={cn(
+                        'min-w-0 shrink truncate',
+                        isWinner ? 'font-semibold text-stamp-700' : 'text-ink'
+                      )}
+                    >
+                      {r.choice}
+                    </span>
+
+                    <span aria-hidden="true" className="leader" />
+
+                    <span data-numeric className="ticket-meta shrink-0 text-xs">
+                      <span className={cn(isWinner ? 'text-stamp-700' : 'text-ink')}>{r.count}</span>
+                      {/* Percent alone hides sample size: 33% of 3 ≠ 33% of 60. */}
                       <span className="text-ink-subtle"> · {Math.round(percentage)}%</span>
                     </span>
-                  </div>
+                  </li>
+                );
+              })}
+            </ol>
 
-                  <div
-                    role="progressbar"
-                    aria-valuenow={Math.round(percentage)}
-                    aria-valuemin={0}
-                    aria-valuemax={100}
-                    aria-label={`${r.choice}: ${r.count} of ${totalVotes} votes`}
-                    className="h-2.5 w-full overflow-hidden rounded-full bg-surface-muted"
-                  >
-                    {/* Every bar is the Calvada green. Bar LENGTH already encodes
-                        standing, so coloring by rank would be redundant — and the
-                        old index-keyed rainbow made bars swap colors whenever the
-                        ranking moved, which read as the data changing. */}
-                    <div
-                      className="h-full rounded-full bg-brand-500 transition-[width] duration-700 ease-out"
-                      style={{ width: barsReady ? `${percentage}%` : '0%' }}
-                    />
-                  </div>
-                </li>
-              );
-            })}
-          </ol>
+            <div
+              className={cn(
+                'ticket-meta mt-3 flex items-baseline justify-between border-t border-ink pt-2.5 text-[0.625rem] text-ink-muted'
+              )}
+            >
+              <span>TOTAL</span>
+              <span data-numeric>
+                {totalVotes} {totalVotes === 1 ? 'VOTE' : 'VOTES'}
+              </span>
+            </div>
+
+            {showWinnerBanner && (
+              // The one orchestrated moment in the app, once a week. Rotated in
+              // place rather than absolutely positioned — an overlay would sit
+              // on top of the tally at narrow widths. Not color-only: the word
+              // ORDERED and the dish name both carry the meaning.
+              <div className="mt-6 flex justify-end pr-3">
+                <p
+                  className="animate-stamp ticket-control border-[3px] border-double border-stamp-600 px-3 pb-1.5 pt-2 text-center text-stamp-600 opacity-90"
+                  style={{ transform: 'rotate(-11deg)' }}
+                >
+                  <span className="block text-lg leading-none">Ordered</span>
+                  <span className="mt-1 block text-[0.5rem] tracking-[0.16em]">
+                    {weeklyWinner?.name}
+                  </span>
+                </p>
+              </div>
+            )}
+
+            {showWinnerBanner && <p className="sr-only">{bannerText}</p>}
+          </>
         )}
       </div>
     </section>

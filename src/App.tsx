@@ -46,23 +46,23 @@ function App() {
 
   return (
     <div className="min-h-screen bg-canvas text-ink">
-      <header className="border-b border-border bg-surface">
+      {/* The header is the counter, not a ticket — it stays on the kraft ground
+          so the sheets in <main> are the only thing made of paper. */}
+      <header className="border-b border-border-strong">
         <div className="mx-auto flex max-w-2xl flex-wrap items-center justify-between gap-x-4 gap-y-3 px-5 py-4 sm:px-6">
-          {/* Wordmark lockup — replace the mark + eyebrow with the real Calvada asset. */}
+          {/* Wordmark lockup — replace the mark + eyebrow with the real Calvada
+              asset. This green square and the confirm button are the only two
+              places green appears; results are stamp red. */}
           <div className="flex items-center gap-3">
             <span
               aria-hidden="true"
-              className="flex h-9 w-9 items-center justify-center rounded-field bg-brand-500 text-on-brand"
+              className="flex h-9 w-9 items-center justify-center bg-brand-500 text-on-brand"
             >
               <UtensilsCrossed size={18} strokeWidth={2.25} />
             </span>
             <span className="leading-tight">
-              <span className="block text-[0.6875rem] font-semibold uppercase tracking-[0.14em] text-ink-subtle">
-                Calvada
-              </span>
-              <span className="block font-display text-lg font-extrabold tracking-tight">
-                Lunch Vote
-              </span>
+              <span className="ticket-mark block text-[0.625rem] text-brand-600">Calvada</span>
+              <span className="ticket-title mt-0.5 block text-xl">Lunch Vote</span>
             </span>
           </div>
 

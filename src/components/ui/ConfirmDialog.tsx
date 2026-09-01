@@ -75,7 +75,7 @@ export function useConfirm() {
           {isDanger && (
             <span
               aria-hidden="true"
-              className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-danger-50 text-danger-600"
+              className="flex h-10 w-10 shrink-0 items-center justify-center bg-danger-50 text-danger-600"
             >
               <AlertTriangle size={20} strokeWidth={2.25} />
             </span>

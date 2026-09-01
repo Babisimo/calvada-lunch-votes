@@ -7,14 +7,18 @@
 
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Archivo is loaded with its WIDTH axis (62..125), not just weight. The
+         expanded wordmark and the condensed headline are the same family at
+         opposite ends of that axis — dropping `wdth` silently flattens both. -->
     <link
-      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap"
+      href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Newsreader:opsz,wght@6..72,400..600&family=Martian+Mono:wght@400;700&display=swap"
       rel="stylesheet"
     />
 
     <title>Calvada Lunch Vote</title>
     <meta name="description" content="Pick this week's team lunch at Calvada." />
-    <meta name="theme-color" content="#238d4f" />
+    <meta name="theme-color" content="#e8e0d4" />
+    <meta name="theme-color" content="#17130f" media="(prefers-color-scheme: dark)" />
   </head>
   <body>
     <div id="root"></div>

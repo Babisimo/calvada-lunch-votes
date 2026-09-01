@@ -7,7 +7,7 @@ import { Check, Lock } from 'lucide-react';
 import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
 import { voteDocId } from './utils/voteDocId';
-import { btn, btnSize, cn, panel } from './ui/styles';
+import { btn, btnSize, cn, panel, ticketRule } from './ui/styles';
 
 function toMillis(v: any): number {
   if (!v) return 0;
@@ -36,30 +36,27 @@ function StatusCard({
     <section
       className={cn(
         panel,
-        'animate-rise flex items-center gap-3.5 p-5',
+        'paper-tear animate-rise relative flex items-center gap-3.5 p-5 pt-6',
         tone === 'affirm' && 'border-brand-200 bg-brand-50'
       )}
     >
       <span
         aria-hidden="true"
         className={cn(
-          'animate-pop flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-lg',
-          tone === 'affirm' ? 'bg-brand-200 text-brand-900' : 'bg-surface-muted text-ink-subtle'
+          'animate-pop flex h-9 w-9 shrink-0 items-center justify-center text-lg',
+          // Matches the header lockup — a green square is the app's mark, so the
+          // confirmation reads as Calvada rather than as a stray mint chip.
+          tone === 'affirm' ? 'bg-brand-500 text-on-brand' : 'bg-surface-muted text-ink-subtle'
         )}
         style={{ animationDelay: '120ms' }}
       >
         {icon}
       </span>
       <div className="min-w-0">
-        <p
-          className={cn(
-            'font-display font-bold tracking-tight',
-            tone === 'affirm' ? 'text-brand-900' : 'text-ink'
-          )}
-        >
+        <p className={cn('ticket-title text-lg', tone === 'affirm' ? 'text-brand-900' : 'text-ink')}>
           {title}
         </p>
-        {body && <p className="mt-0.5 text-sm text-ink-muted">{body}</p>}
+        {body && <p className="mt-1 text-sm text-ink-muted">{body}</p>}
       </div>
     </section>
   );
@@ -230,18 +227,28 @@ export default function Voting({ user }: { user: any }) {
   }
 
   return (
-    <section className={cn(panel, 'animate-rise p-5 sm:p-6')}>
-      <fieldset className="border-0 p-0">
+    <section className={cn(panel, 'paper-tear animate-rise relative p-5 pt-7 sm:p-6 sm:pt-8')}>
+      {/* Ticket header. The week key is an internal identifier, but on an order
+          pad the order number is exactly the sort of thing that gets printed at
+          the top — so it earns its place here rather than reading as debug. */}
+      <div className={cn(ticketRule, 'ticket-meta flex items-baseline justify-between pb-2 text-[0.625rem] text-ink-muted')}>
+        <span>ORDER {weekKey || '—'}</span>
+        <span>NOT SENT</span>
+      </div>
+
+      <fieldset className="mt-4 border-0 p-0">
         <legend className="mb-4 w-full">
-          <span className="font-display text-xl font-bold tracking-tight">
-            Choose this week&apos;s lunch <span aria-hidden="true">🍽️</span>
+          <span className="ticket-title block text-2xl">
+            Today&apos;s
+            <br />
+            order
           </span>
-          <span className="mt-1 block text-sm text-ink-muted">
-            Pick one. You can&apos;t change it after you submit.
+          <span className="mt-1.5 block text-sm text-ink-muted">
+            One pick each. You can&apos;t change it after you send it.
           </span>
         </legend>
 
-        <div className="space-y-2.5">
+        <div className="flex flex-col">
           {choices.map((opt, idx) => {
             const isSelected = selected === opt;
             return (
@@ -258,32 +265,32 @@ export default function Voting({ user }: { user: any }) {
                   onChange={() => setSelected(opt)}
                   className="peer sr-only"
                 />
-                {/* Whole card is the tap target — a 20px radio is a poor one on mobile. */}
+                {/* Whole line is the tap target — a 20px radio is a poor one on
+                    mobile. Lines sit flush like printed menu rows rather than
+                    floating as cards, so the ticket reads as one sheet. */}
                 <div
                   className={cn(
-                    'flex items-center gap-3 rounded-card border-2 px-4 py-3.5',
-                    'transition-[background-color,border-color,transform,box-shadow] duration-200',
-                    'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-brand-600',
-                    isSelected
-                      ? 'border-brand-600 bg-brand-50 shadow-card'
-                      : 'border-border bg-surface hover:-translate-y-0.5 hover:border-border-strong hover:bg-surface-muted hover:shadow-card'
+                    'flex items-center gap-3 px-2 py-3',
+                    'transition-colors duration-150',
+                    'peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-stamp-600',
+                    isSelected ? 'bg-stamp-50' : 'hover:bg-surface-muted'
                   )}
                 >
+                  {/* Square, because you tick a box on a paper order — and the
+                      tick is stamp red, never green. */}
                   <span
                     aria-hidden="true"
                     className={cn(
-                      'flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors',
-                      isSelected
-                        ? 'border-brand-600 bg-brand-600 text-on-brand'
-                        : 'border-border-strong bg-surface'
+                      'flex h-[18px] w-[18px] shrink-0 items-center justify-center border-2 transition-colors',
+                      isSelected ? 'border-stamp-600 bg-stamp-600 text-on-stamp' : 'border-ink'
                     )}
                   >
                     {isSelected && <Check className="animate-pop" size={12} strokeWidth={3.5} />}
                   </span>
                   <span
                     className={cn(
-                      'text-base font-semibold',
-                      isSelected ? 'text-brand-900' : 'text-ink'
+                      'text-base',
+                      isSelected ? 'font-semibold text-stamp-700' : 'text-ink'
                     )}
                   >
                     {opt}
@@ -298,9 +305,9 @@ export default function Voting({ user }: { user: any }) {
       <button
         onClick={castVote}
         disabled={!selected || isSubmitting}
-        className={cn(btn.primary, btnSize.lg, 'mt-5')}
+        className={cn(btn.primary, btnSize.lg, 'mt-6')}
       >
-        {isSubmitting ? 'Submitting…' : 'Submit vote'}
+        {isSubmitting ? 'Sending…' : 'Send my order'}
       </button>
     </section>
   );
