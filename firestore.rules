@@ -57,6 +57,17 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/config/votingConfig).data;
     }
 
+    // The click battle for a week. Both helpers read the same document; Firestore
+    // deduplicates identical get() paths within one rule evaluation, so this
+    // costs one read, not two.
+    function battleOptions(weekId) {
+      return get(/databases/$(database)/documents/tieBreakers/$(weekId)).data.options;
+    }
+
+    function battleEndsAt(weekId) {
+      return get(/databases/$(database)/documents/tieBreakers/$(weekId)).data.endsAt;
+    }
+
     // The admin UI writes numeric startMs/endMs alongside the ISO strings so the
     // window can be checked here — rules cannot parse a datetime-local string.
     // If a config predates that change the check is skipped rather than locking
@@ -154,6 +165,70 @@ service cloud.firestore {
     match /config/{docId} {
       allow read: if isSignedIn();
       allow write: if isAdmin();
+    }
+
+    // ---- tieBreakers (the click battle) — DORMANT ---------------------------
+    // The click battle is built but NOT wired into the app; ties are settled by
+    // the admin coin flip instead. See the header of src/components/ClickBattle.tsx.
+    //
+    // This block is left deployed so reviving the feature needs no rules change.
+    // It is inert on its own: every click write reads the battle document via
+    // get(), and nothing creates one now, so a missing battle doc fails the rule
+    // and the write is denied. Safe to delete if the feature is abandoned.
+    //
+    // When a week closes level, an admin can start a timed click battle between
+    // the tied options. Everyone piles onto a side; most clicks wins.
+    //
+    // Each player writes ONLY their own /clicks/{uid} document. A single shared
+    // counter would hit Firestore's ~1 write/sec per-document ceiling the moment
+    // two people mashed at once.
+    //
+    // Counts are absolute, not increments, specifically so these rules can check
+    // them: an increment() is opaque here, an absolute number can be held to
+    // monotonic growth and a rate cap. That bounds a forged count — it does not
+    // make it honest. Anyone with devtools can still inflate within the cap.
+    // Accepted, same as the winner-write gap above; it decides lunch.
+    //
+    // Writes are accepted for 2s PAST endsAt. Clicks are buffered client-side
+    // and flushed on a timer, so the final flush necessarily lands after the
+    // whistle — without the grace window the last half-second of everyone's
+    // clicks would be thrown away, which decides exactly the close battles.
+    // The client stops counting clicks at endsAt; this only lets the buffer land.
+    match /tieBreakers/{weekId} {
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
+
+      match /clicks/{uid} {
+        allow read: if isSignedIn();
+
+        // First write picks your side and creates the doc.
+        allow create: if isCalvada()
+          && uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['choice', 'count', 'updatedAt'])
+          && request.resource.data.choice in battleOptions(weekId)
+          && request.resource.data.count is int
+          && request.resource.data.count > 0
+          && request.resource.data.count <= 40
+          && request.resource.data.updatedAt == request.time
+          && request.time.toMillis() < battleEndsAt(weekId) + 2000;
+
+        allow update: if isCalvada()
+          && uid == request.auth.uid
+          && request.resource.data.keys().hasOnly(['choice', 'count', 'updatedAt'])
+          // YOUR FIRST CLICK COMMITS YOU. Enforced here rather than in the UI so
+          // switching sides late isn't a devtools trick.
+          && request.resource.data.choice == resource.data.choice
+          && request.resource.data.count is int
+          && request.resource.data.count > resource.data.count
+          && request.resource.data.count <= resource.data.count + 40
+          && request.resource.data.updatedAt == request.time
+          // 40 clicks per 350ms caps a script at ~114/sec. A fast human is ~10.
+          && request.time.toMillis() >= resource.data.updatedAt.toMillis() + 350
+          && request.time.toMillis() < battleEndsAt(weekId) + 2000;
+
+        // No editing your own count downward, and no deleting a losing run.
+        allow delete: if isAdmin();
+      }
     }
 
     // ---- winners (legacy read model) ----------------------------------------
