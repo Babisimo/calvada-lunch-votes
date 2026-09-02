@@ -17,19 +17,8 @@ import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
 import { normalizeChoices } from './utils/normalizeChoices';
 import { normalizeKey } from './utils/normalizeKey';
 import { topTie, flipPick } from './utils/tie';
+import { readVotingWindow } from './utils/votingWindow';
 import { btn, btnSize, cn, panel } from './ui/styles';
-
-function toMillis(v: any): number {
-  if (!v) return 0;
-  if (typeof v === 'object' && typeof v.toMillis === 'function') return v.toMillis();
-  if (typeof v === 'object' && 'seconds' in v) return v.seconds * 1000;
-  if (typeof v === 'string') {
-    const t = new Date(v).getTime();
-    return Number.isNaN(t) ? 0 : t;
-  }
-  if (typeof v === 'number') return v;
-  return 0;
-}
 
 /**
  * The coin flip that settles a tied week.
@@ -51,6 +40,7 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
   const [choices, setChoices] = useState<string[]>([]);
   const [winner, setWinner] = useState<any | null>(null);
   const [endMs, setEndMs] = useState(0);
+  const [needsResave, setNeedsResave] = useState(false);
   const [results, setResults] = useState<{ choice: string; count: number }[]>([]);
   const [flipping, setFlipping] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -75,8 +65,12 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
 
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
-      const data = snap.exists() ? snap.data() : null;
-      setEndMs(toMillis(data?.endTime ?? data?.end));
+      // Read endMs the way firestore.rules does. Parsing the ISO string here
+      // instead is what let this panel offer a flip the server would always
+      // deny. See utils/votingWindow.ts.
+      const win = readVotingWindow(snap.exists() ? snap.data() : null);
+      setEndMs(win.endMs);
+      setNeedsResave(win.needsResave);
     });
     return () => unsub();
   }, []);
@@ -186,9 +180,15 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
       });
 
       toast.success(`${picked} wins the flip`);
-    } catch (err) {
+    } catch (err: any) {
       console.error('[AdminTieBreaker] flip failed:', err);
-      toast.error("Couldn't record the flip. Try again.");
+      // "Try again" was actively misleading for the failure that actually
+      // happened: a rules denial repeats forever. Name the likely cause.
+      if (err?.code === 'permission-denied') {
+        toast.error('The rules rejected it — the voting window needs re-saving in /admin.');
+      } else {
+        toast.error("Couldn't record the flip. Try again.");
+      }
     } finally {
       setFlipping(false);
     }
@@ -219,14 +219,36 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
         ))}
       </ul>
 
-      <button onClick={flip} disabled={flipping} className={cn(btn.primary, btnSize.lg, 'mt-6')}>
-        <Coins size={16} strokeWidth={2.25} aria-hidden="true" />
-        {flipping ? 'Flipping…' : 'Flip the coin'}
-      </button>
+      {needsResave ? (
+        // Don't offer an action the server is guaranteed to refuse. The saved
+        // window has no numeric endMs, so firestore.rules cannot tell that
+        // voting ever closed and denies every winner write.
+        <div className="mt-6 border-t border-border pt-5">
+          <p className="ticket-meta text-[0.625rem] text-danger-600">TIMER NEEDS RE-SAVING</p>
+          <p className="mt-2 text-sm text-ink-muted">
+            This week&apos;s voting window was saved in an older format with no numeric end time,
+            and the security rules can&apos;t read it — so nothing can settle the week yet. Open the
+            voting window panel below, re-enter the same times and press{' '}
+            <span className="font-semibold text-ink">Save window</span>. The coin flip appears once
+            that&apos;s done.
+          </p>
+        </div>
+      ) : (
+        <>
+          <button
+            onClick={flip}
+            disabled={flipping}
+            className={cn(btn.primary, btnSize.lg, 'mt-6')}
+          >
+            <Coins size={16} strokeWidth={2.25} aria-hidden="true" />
+            {flipping ? 'Flipping…' : 'Flip the coin'}
+          </button>
 
-      <p className="mt-2.5 text-center text-xs text-ink-subtle">
-        This can only be done once for this voting window.
-      </p>
+          <p className="mt-2.5 text-center text-xs text-ink-subtle">
+            This can only be done once for this voting window.
+          </p>
+        </>
+      )}
     </section>
   );
 }

@@ -5,6 +5,7 @@ import { doc, setDoc, onSnapshot } from 'firebase/firestore';
 import toast from 'react-hot-toast';
 import { Clock, Save } from 'lucide-react';
 import { btn, btnSize, cn, field, label, panel, sectionTitle } from './ui/styles';
+import { readVotingWindow } from './utils/votingWindow';
 
 type Phase = 'idle' | 'pending' | 'live' | 'ended' | 'invalid';
 
@@ -18,12 +19,17 @@ export default function VotingTimerAdmin() {
   const [end, setEnd] = useState('');
   const [phase, setPhase] = useState<Phase>('idle');
   const [countdown, setCountdown] = useState('');
+  const [needsResave, setNeedsResave] = useState(false);
 
   useEffect(() => {
     const unsub = onSnapshot(configRef, (snap) => {
       const data = snap.data();
       if (data?.start) setStart(data.start);
       if (data?.end) setEnd(data.end);
+      // A window saved before startMs/endMs existed still drives the inputs and
+      // the countdown, but firestore.rules cannot read it and will refuse to
+      // record a winner. Saying so here is the only place it can be fixed.
+      setNeedsResave(readVotingWindow(data).needsResave);
     });
     return unsub;
   }, []);
@@ -100,6 +106,16 @@ export default function VotingTimerAdmin() {
         </span>
         <h2 className={sectionTitle}>Voting window</h2>
       </div>
+
+      {needsResave && (
+        <p className="mb-4 border border-danger-200 bg-danger-50 px-4 py-3 text-sm text-ink-muted">
+          <span className="font-semibold text-danger-700">Re-save this window.</span> It was saved
+          in an older format with no numeric end time. Voting still works, but the security rules
+          can&apos;t tell that it ever closes, so <b>no winner can be recorded</b> — the tie
+          breaker and the automatic result both fail silently. Re-entering the same times and
+          saving fixes it.
+        </p>
+      )}
 
       <p className="mb-3 text-sm text-ink-subtle">
         Times are in <b className="font-semibold text-ink">{LOCAL_ZONE}</b> — your computer&apos;s

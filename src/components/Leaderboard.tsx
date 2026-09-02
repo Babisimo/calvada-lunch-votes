@@ -13,6 +13,7 @@ import { Clock, Lock, TimerReset } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { cn, panel, ticketRule } from './ui/styles';
 import { topTie } from './utils/tie';
+import { readVotingWindow } from './utils/votingWindow';
 import CoinFlip from './ui/CoinFlip';
 
 function toMillis(v: any): number {
@@ -90,6 +91,9 @@ export default function Leaderboard() {
 
   const hasCelebratedRef = useRef(false);
   const decidingRef = useRef(false);
+  const warnedResaveRef = useRef(false);
+
+  const [windowNeedsResave, setWindowNeedsResave] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 1000);
@@ -156,11 +160,10 @@ export default function Leaderboard() {
   useEffect(() => {
     const unsub = onSnapshot(doc(db, 'config', 'votingConfig'), (snap) => {
       if (!snap.exists()) { setVoteStartMs(null); setEndTimeMs(null); return; }
-      const data = snap.data();
-      const startMs = toMillis(data?.startTime ?? data?.start);
-      const endMs = toMillis(data?.endTime ?? data?.end);
-      setVoteStartMs(startMs || null);
-      setEndTimeMs(endMs || null);
+      const win = readVotingWindow(snap.data());
+      setVoteStartMs(win.startMs || null);
+      setEndTimeMs(win.endMs || null);
+      setWindowNeedsResave(win.needsResave);
     });
     return () => unsub();
   }, []);
@@ -181,6 +184,20 @@ export default function Leaderboard() {
     if (!weekKey || !endTimeMs || now < endTimeMs) return;
     if (totalVotes <= 0 || weeklyChoices.length === 0) return;
     if (decidingRef.current) return;
+
+    // Without numeric startMs/endMs the rules cannot tell voting ever closed and
+    // deny every winner write. Attempting anyway retried a doomed transaction
+    // once a second, quietly burning reads. Say it once and stop.
+    if (windowNeedsResave) {
+      if (!warnedResaveRef.current) {
+        warnedResaveRef.current = true;
+        console.warn(
+          '[Leaderboard] No winner can be recorded: config/votingConfig has no numeric endMs. ' +
+            'Re-save the voting window in /admin.'
+        );
+      }
+      return;
+    }
 
     const settledForThisWindow = weeklyWinner?.decidedForEndMs === endTimeMs;
     const staleAgainstBallot =
@@ -250,7 +267,7 @@ export default function Leaderboard() {
         decidingRef.current = false;
       }
     })();
-  }, [weekKey, endTimeMs, now, totalVotes, weeklyChoices, weeklyWinner, weeklyUpdatedAtMs]);
+  }, [weekKey, endTimeMs, now, totalVotes, weeklyChoices, weeklyWinner, weeklyUpdatedAtMs, windowNeedsResave]);
 
   const decidedAtMs = toMillis(weeklyWinner?.decidedAt);
   const windowClosed = !!endTimeMs && now >= endTimeMs;
