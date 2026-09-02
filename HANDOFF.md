@@ -111,6 +111,35 @@ three tiebreakers that disagreed (ballot order here, ballot order in
 deleted). If you deploy the Cloud Function, its tiebreak must be changed to
 match — bail on a tie rather than resolving it.
 
+#### The click battle is built, and deliberately switched off
+`ClickBattle.tsx` and `utils/battle.ts` are a working timed click battle — admin
+sets a duration, everyone piles onto a side, most clicks wins. It was tested
+against live Firestore and then pulled: fun, but it turned settling a lunch vote
+into an event that demanded everyone's attention. **Do not re-propose it without
+being asked.**
+
+Nothing imports either file, so both are tree-shaken out of the bundle and cost
+production nothing. Each carries a header with the exact steps to re-wire it.
+The `tieBreakers` block in `firestore.rules` stays deployed and is marked
+DORMANT — it is inert without a battle document, which nothing creates now, so
+reviving the feature needs no rules change. Safe to delete if it is abandoned.
+
+Four things that cost real time, if it ever comes back:
+- **Buffer clicks, never write per click.** A write per click pushes a snapshot
+  to every listener per click; a 20-second battle with ten people burns roughly
+  a fifth of the daily free-tier READ quota, and when that runs out *voting*
+  starts failing, not just the game.
+- **Counts must be absolute, not `increment()`** — an increment is opaque to
+  security rules, so it cannot be held to monotonic growth or a rate cap.
+- **Never mix the server's echo of your own count with your unwritten local
+  clicks.** A flush advances the local baseline before the snapshot carrying it
+  arrives, so the scoreboard collapses and snaps back twice a second. Own count
+  local, everyone else's from Firestore.
+- **Rules must accept writes slightly past the deadline.** The final buffered
+  flush necessarily lands after the whistle; without a grace window the last
+  half-second of everyone's clicks is thrown away, which decides exactly the
+  close battles. Settlement then has to wait out that window too.
+
 ### Design tokens
 `src/index.css` is the single source of truth. Everything reads tokens
 (`bg-brand-600`, `text-ink-muted`, `rounded-card`), nothing reads raw Tailwind
