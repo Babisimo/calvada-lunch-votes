@@ -1,6 +1,6 @@
 # Handoff — UI overhaul + security hardening
 
-**Written:** 2026-08-04 · **Last updated:** 2026-09-01
+**Written:** 2026-08-04 · **Last updated:** 2026-09-02
 **Branch:** `main`
 **Firebase project:** `calvada-lunch-voting-project`
 **Hosting:** Vercel, deploys on push to `main`
@@ -14,27 +14,36 @@
 | Firestore rules + indexes | **Deployed to production** |
 | Frontend code | **Committed and deployed** |
 | Vercel env vars | **Set** (confirmed 2026-09-01) |
-| `config/currentWeek` | Set by hand — **confirm it reads `2026-W36`, not `2025-W36`** |
+| `config/currentWeek` | `2026-W36` — correct as of 2026-09-02 |
+| `config/votingConfig` | **Re-saved with numeric `startMs`/`endMs`** — see the gotcha |
+| Coin-flip tiebreaker | Exercised end to end in production (2026-W36, 7–7) |
 | Cloud Function (`functions/`) | Written, deliberately NOT deployed |
 
-Voting works. It was broken until 2026-09-01 because the Firestore rules had
-been deployed but the frontend that matched them never shipped:
+Voting works, and a tied week has now been settled for real.
+
+Two production breakages were found and fixed, both of the same shape — a rule
+and a client disagreeing about a stored value:
 
 ```
-deployed frontend:  addDoc(collection(db, 'votes'), ...)  -> random doc ID
-deployed rules:     voteId == currentWeek() + '_' + uid   -> denied everything
+1. deployed frontend:  addDoc(collection(db, 'votes'), ...)  -> random doc ID
+   deployed rules:     voteId == currentWeek() + '_' + uid   -> denied every vote
+
+2. every client:       Date.parse(votingConfig.end)          -> "voting closed"
+   deployed rules:     votingConfig.endMs, absent -> 0       -> denied every winner
 ```
 
-Firestore itself was healthy the whole time. Shipping the frontend fixed it.
+The second silently blocked *all* winner writes for a month, automatic ones
+included, while voting kept working perfectly. Firestore was healthy throughout
+both. See **Gotchas found the hard way**.
 
 ---
 
 ## Open items
 
-**Check the week key for a year typo.** The banner on `/admin` compares
-`config/currentWeek` against today's real ISO week and says so out loud when
-they disagree — it caught `2025-W36` where `2026-W36` was meant. If it is still
-showing, decide with the vote count in hand:
+**Watch the week-key banner.** `/admin` compares `config/currentWeek` against
+today's real ISO week and says so out loud when they disagree — it caught a
+`2025-W36` year typo where `2026-W36` was meant. Resolved, but if it appears
+again, decide with the vote count in hand:
 
 - **Nobody has voted yet** → set the correct key in *Current week*, then draw
   the options again, because `weeklyOptions/{week}` is per-key.
@@ -197,6 +206,30 @@ Both the browser tally and the optional Cloud Function write the identical
 object, including `decidedForEndMs`. That field is what stops them fighting and
 what makes extending the timer re-open the decision.
 
+A flip-settled week additionally carries `viaFlip: true` and
+`tiedBetween: [...]`. **Those two are not decoration** — they are what lets the
+result state, permanently, that a choice was made rather than a winner appearing
+from nowhere. Don't drop them from the payload.
+
+### The flip is evidence, not an animation
+The point of the coin is to show that a real decision happened between two named
+options. That requirement is served by the *record*, not the motion:
+
+- The result permanently reads `TIE 7–7 · SETTLED BY COIN FLIP` with both names,
+  built from `tiedBetween` and `tally`, so it survives reloads and works for
+  anyone who never saw the coin.
+- A **Watch the flip** button replays it on demand — the animation is otherwise
+  once per person per week (`localStorage` key `calvada-lunch-flip-seen`), and a
+  one-shot you can miss is not evidence.
+- The coin plays in the **admin panel** too. The person who flips was previously
+  the one person guaranteed not to see it, because the animation lives in
+  Leaderboard and `/admin` doesn't render it. That required the settled-panel
+  early return to yield, or the panel vanished mid-spin as the write landed.
+- The faces carry the two dish names. `.coin-label` condenses Archivo to
+  `wdth 82` to fit them; long single words break rather than spilling out.
+  Landing on the front face isn't a spoiler — at five turns in 2.2s neither side
+  is readable until it stops.
+
 ---
 
 ## What changed
@@ -276,6 +309,31 @@ Slack winner announcements live inside that function, so they are off too.
 
 ## Gotchas found the hard way
 
+- **The voting window is stored TWICE, and only the numbers count.**
+  `config/votingConfig` holds `start`/`end` as ISO strings for the
+  datetime-local inputs and `startMs`/`endMs` as numbers. **Rules cannot parse a
+  datetime string, so they only ever read the numbers.** Every client used to
+  parse the string instead, and a config document written before the numeric
+  fields existed made the two disagree completely: the app was certain voting
+  had closed and offered to settle the week, while the rules saw `endMs = 0`,
+  concluded voting had never closed, and denied *every* winner write — automatic
+  ones included — for a month.
+
+  It hid because `withinVotingWindow()` fails **open** on a missing field while
+  `votingHasClosed()` fails **closed**. Voting worked perfectly; only recording a
+  result was broken, and nothing surfaced it until someone tried to settle a tie.
+
+  `utils/votingWindow.ts` is now the single reader: it takes `endMs`
+  authoritatively, falls back to the strings for display only, and reports
+  `needsResave` so the UI can say so instead of guessing. Anything that has to
+  agree with the server reads that helper, never the raw document.
+  **Re-saving the timer in `/admin` writes the numeric fields.**
+- **`CoinFlip`'s timers must not depend on `onDone`.** Leaderboard re-renders
+  every second from its countdown tick, so an inline arrow as an effect
+  dependency tore the timers down and rebuilt them once a second — the coin
+  never landed, the winner was never revealed, and `onDone` never fired. It is
+  held in a ref now and the sequence runs once, from mount. Same trap for any
+  animation whose parent ticks.
 - **Tailwind v4 tree-shakes unused theme values.** `#238d4f` was absent from the
   compiled CSS until something actually referenced `brand-500`. Verify tokens
   survive the build, don't assume.
@@ -313,3 +371,14 @@ Slack winner announcements live inside that function, so they are off too.
   are what carry sample size now. Inherent to the direction, not an oversight.
 - **The tally has no upper bound on option count.** Five options fit the ticket
   comfortably; a dozen would want a scroll or a cut-off, and nothing enforces one.
+- **`collectionGroup` queries on `/votes` are denied.** The rules only match
+  `/votes/{voteId}` at the top level, so the collection-group listener in
+  `AdminDashboard` always fails and falls back to the top-level query. It works,
+  but logs `Missing or insufficient permissions` on every admin load. Noise, not
+  breakage — either add a `match /{path=**}/votes/{voteId}` read rule or drop the
+  collectionGroup path.
+- **Resetting a settled week needs the Firebase console.** Rules deliberately
+  forbid admins from touching a decided `winner` — that is the no-flip-flopping
+  guarantee — so re-running a tie means deleting the `winner` field by hand *and*
+  clearing the `localStorage` key `calvada-lunch-flip-seen`, or the animation
+  won't replay for you.
