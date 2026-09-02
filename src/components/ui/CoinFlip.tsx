@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react';
-import { UtensilsCrossed } from 'lucide-react';
 import { cn } from './styles';
 
 /**
@@ -66,13 +65,20 @@ export default function CoinFlip({
         TIE — {tiedBetween.length} WAY · COIN FLIP
       </p>
 
+      {/* A two-sided coin carries two names. The winner is on the front face,
+          which is where five whole turns leave it — that is not a spoiler in
+          practice, because at this speed neither side is readable until it
+          stops. On a tie of three or more the back shows the first of the other
+          contenders; the label above already says how many ways it ran. */}
       <div className="coin-stage">
         <div className="coin-toss">
           <div className="coin-spin">
-            <span className="coin-face">
-              <UtensilsCrossed size={30} strokeWidth={2} aria-hidden="true" />
+            <span className="coin-face" aria-hidden="true">
+              <span className="coin-label">{winner}</span>
             </span>
-            <span className="coin-face coin-face-back ticket-control text-xs">Tie</span>
+            <span className="coin-face coin-face-back" aria-hidden="true">
+              <span className="coin-label">{others[0] ?? 'Tie'}</span>
+            </span>
           </div>
         </div>
       </div>

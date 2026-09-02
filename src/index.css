@@ -345,12 +345,31 @@
 
   .coin-spin {
     position: relative;
-    width: 5.75rem;
-    height: 5.75rem;
+    /* Sized to hold a dish name, not an icon — "Chicken Katsu Curry" has to fit
+       on a face without becoming unreadable. */
+    width: 7rem;
+    height: 7rem;
     transform-style: preserve-3d;
     /* 1800deg is five whole turns, so it lands on the FRONT face. An odd
        half-turn here would end on the back and read as the wrong result. */
     animation: coin-spin 2.2s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  }
+
+  /* The name stamped on a coin face. Leans on Archivo's width axis — condensing
+     to 82 buys roughly three more characters per line inside a circle, which is
+     the difference between "Katsu" fitting and not. */
+  .coin-label {
+    font-family: var(--font-display);
+    font-variation-settings: "wdth" 82, "wght" 700;
+    font-size: 0.5625rem;
+    line-height: 1.15;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    text-align: center;
+    padding: 0 0.85rem;
+    /* Long single words break rather than spilling outside the circle. */
+    overflow-wrap: anywhere;
+    hyphens: auto;
   }
 
   .coin-face {
