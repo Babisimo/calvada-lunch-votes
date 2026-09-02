@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { UtensilsCrossed } from 'lucide-react';
 import { cn } from './styles';
 
@@ -31,14 +31,27 @@ export default function CoinFlip({
   const SPIN_MS = 2200;
   const REVEAL_MS = 900;
 
+  // onDone is held in a ref so its identity CANNOT restart the sequence.
+  //
+  // It used to be an effect dependency, and both call sites pass an inline
+  // arrow. Leaderboard re-renders every second from its countdown tick, so the
+  // effect tore down and rebuilt its timers once a second: the coin never
+  // landed, the winner was never revealed, and onDone never fired. The timers
+  // must run exactly once, from mount.
+  const onDoneRef = useRef(onDone);
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  });
+
   useEffect(() => {
     const land = setTimeout(() => setLanded(true), SPIN_MS);
-    const done = setTimeout(onDone, SPIN_MS + REVEAL_MS);
+    const done = setTimeout(() => onDoneRef.current(), SPIN_MS + REVEAL_MS);
     return () => {
       clearTimeout(land);
       clearTimeout(done);
     };
-  }, [onDone]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const others = tiedBetween.filter((name) => name !== winner);
 

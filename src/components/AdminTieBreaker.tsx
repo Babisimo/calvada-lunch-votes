@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   collection,
   collectionGroup,
@@ -19,6 +19,7 @@ import { normalizeKey } from './utils/normalizeKey';
 import { topTie, flipPick } from './utils/tie';
 import { readVotingWindow } from './utils/votingWindow';
 import { btn, btnSize, cn, panel } from './ui/styles';
+import CoinFlip from './ui/CoinFlip';
 
 /**
  * The coin flip that settles a tied week.
@@ -43,6 +44,11 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
   const [needsResave, setNeedsResave] = useState(false);
   const [results, setResults] = useState<{ choice: string; count: number }[]>([]);
   const [flipping, setFlipping] = useState(false);
+  // Set on a successful flip so the admin watches the coin land HERE, rather
+  // than getting a toast and having to open the app to see what they just did.
+  const [justFlipped, setJustFlipped] = useState<{ winner: string; tiedBetween: string[] } | null>(
+    null
+  );
   const [now, setNow] = useState(Date.now());
 
   // Coarse tick: this panel only cares about crossing the closing time.
@@ -110,9 +116,31 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
     return () => unsub && unsub();
   }, [weekKey, choices]);
 
+  const noop = useCallback(() => {}, []);
+
   const tied = topTie(results);
   const windowClosed = !!endMs && now >= endMs;
   const settledForThisWindow = winner?.decidedForEndMs === endMs;
+
+  // Once the flip is written, `settledForThisWindow` goes true and this panel
+  // would normally vanish — taking the animation with it mid-spin. Showing the
+  // result takes precedence over hiding a settled panel.
+  if (justFlipped) {
+    return (
+      <section className={cn(panel, 'paper-tear relative p-5 pt-7 sm:p-6 sm:pt-8')}>
+        <div className="ticket-meta text-[0.625rem] text-stamp-600">TIE — SETTLED</div>
+        <CoinFlip
+          tiedBetween={justFlipped.tiedBetween}
+          winner={justFlipped.winner}
+          onDone={noop}
+        />
+        <p className="mt-5 text-center text-sm text-ink-muted">
+          Recorded. Everyone who opens the app sees this land, and the result says it was a coin
+          flip.
+        </p>
+      </section>
+    );
+  }
 
   if (!weekKey || !windowClosed || tied.length < 2 || settledForThisWindow) return null;
 
@@ -179,7 +207,7 @@ export default function AdminTieBreaker({ weekKey }: { weekKey: string }) {
         );
       });
 
-      toast.success(`${picked} wins the flip`);
+      setJustFlipped({ winner: picked, tiedBetween: freshTie });
     } catch (err: any) {
       console.error('[AdminTieBreaker] flip failed:', err);
       // "Try again" was actively misleading for the failure that actually

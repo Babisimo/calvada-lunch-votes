@@ -1,5 +1,5 @@
 // src/components/Leaderboard.tsx
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { db } from '../../firebaseConfig';
 import {
   collection, collectionGroup, doc, onSnapshot, query, where,
@@ -9,9 +9,9 @@ import { useWeekKey } from './utils/useWeekKey';
 import { normalizeChoices } from './utils/normalizeChoices';
 import { normalizeKey } from './utils/normalizeKey';
 import { subscribeWeeklyOptions } from './utils/subscribeWeeklyOptions';
-import { Clock, Lock, TimerReset } from 'lucide-react';
+import { Clock, Lock, RotateCcw, TimerReset } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { cn, panel, ticketRule } from './ui/styles';
+import { btn, cn, panel, ticketRule } from './ui/styles';
 import { topTie } from './utils/tie';
 import { readVotingWindow } from './utils/votingWindow';
 import CoinFlip from './ui/CoinFlip';
@@ -311,6 +311,24 @@ export default function Leaderboard() {
 
   const playingFlip = flipStage === 'play';
 
+  // Marking it seen on replay too, so a deliberate rewatch doesn't queue up an
+  // unwanted automatic one on the next visit.
+  const finishFlip = useCallback(() => {
+    markFlipSeen(weekKey);
+    setFlipStage('done');
+  }, [weekKey]);
+
+  // Evidence copy for a flip-decided week. `tiedBetween` and `tally` are both on
+  // the winner document, so this survives reloads and works for anyone who
+  // never saw the animation.
+  const flipTied: string[] = weeklyWinner?.tiedBetween ?? [];
+  const flipLosers = flipTied.filter((name) => name !== weeklyWinner?.name);
+  const flipCount = weeklyWinner?.tally?.[flipTied[0]] ?? 0;
+  const flipLabel =
+    flipTied.length === 2
+      ? `TIE ${flipCount}–${flipCount} · SETTLED BY COIN FLIP`
+      : `${flipTied.length}-WAY TIE AT ${flipCount} · SETTLED BY COIN FLIP`;
+
   // Gated on flipStage rather than showWinnerBanner: on a flip-decided week the
   // winner is known the moment the page loads, so celebrating on that alone
   // would fire the confetti while the coin is still in the air. 'done' is
@@ -517,11 +535,33 @@ export default function Leaderboard() {
               <CoinFlip
                 tiedBetween={weeklyWinner?.tiedBetween ?? []}
                 winner={weeklyWinner?.name ?? ''}
-                onDone={() => {
-                  markFlipSeen(weekKey);
-                  setFlipStage('done');
-                }}
+                onDone={finishFlip}
               />
+            )}
+
+            {/* The permanent record that a CHOICE was made.
+                The animation is a one-off; this is what anyone arriving later —
+                or reloading — sees instead of a winner that appeared from
+                nowhere. It names both options and how the deadlock broke, and
+                the flip stays rewatchable rather than being a moment you miss. */}
+            {showWinnerBanner && !playingFlip && weeklyWinner?.viaFlip && (
+              <div className="mt-5 flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2 border-t border-border pt-4">
+                <div className="min-w-0">
+                  <p className="ticket-meta text-[0.625rem] text-stamp-600">{flipLabel}</p>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    {weeklyWinner.name}
+                    {flipLosers.length > 0 && <> over {flipLosers.join(', ')}</>}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setFlipStage('play')}
+                  className={cn(btn.quiet, 'shrink-0 px-2 py-1')}
+                >
+                  <RotateCcw size={14} strokeWidth={2.25} aria-hidden="true" />
+                  Watch the flip
+                </button>
+              </div>
             )}
 
             {showWinnerBanner && !playingFlip && (
